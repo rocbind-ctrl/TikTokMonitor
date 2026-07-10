@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  {% include "_head.html" %}
+  <title>数据分析 - TikTok 监控</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="app-body">
+  {% include "_nav.html" %}
+  <div class="container">
+    <header class="page-header">
+      <div>
+        <h1>数据分析</h1>
+        <p class="subtitle">趋势、排行、告警</p>
+      </div>
+      <div class="actions">
+        <a href="/logs" class="btn btn-secondary">同步日志</a>
+        <a href="/alerts" class="btn btn-secondary">告警记录</a>
+        <a href="/export/accounts.csv" class="btn btn-secondary">导出</a>
+      </div>
+    </header>
+
+    {% if trend.labels %}
+    <div class="panel">
+      <h2>7 日趋势</h2>
+      <div class="chart-wrap chart-sm"><canvas id="trendChart"></canvas></div>
+    </div>
+    {% endif %}
+
+    <div class="grid-2">
+      <div class="panel" id="alerts">
+        <div class="panel-head">
+          <h2>告警 {% if unread_count %}<span class="badge badge-error">{{ unread_count }}</span>{% endif %}</h2>
+          {% if unread_count %}
+          <form action="/alerts/read-all" method="post"><button type="submit" class="btn btn-secondary btn-sm">全部已读</button></form>
+          {% endif %}
+        </div>
+        {% if alerts %}
+        <div class="alert-list">
+          {% for alert in alerts %}
+          <div class="alert-item alert-{{ alert.level }}">
+            <div class="alert-title">{{ alert.title }}</div>
+            <div class="alert-msg">{{ alert.message }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% if unread_count > 10 %}<p class="muted" style="margin-top:8px"><a href="/alerts">查看全部 →</a></p>{% endif %}
+        {% else %}
+        <p class="empty">暂无告警</p>
+        {% endif %}
+      </div>
+
+      <div class="panel">
+        <h2>24h 播放增长 TOP</h2>
+        {% if gainers %}
+        <table>
+          <thead><tr><th>视频</th><th class="num">增量</th></tr></thead>
+          <tbody>
+            {% for item in gainers %}
+            <tr>
+              <td class="title-cell"><a href="/video/{{ item.video.id }}">{{ item.video.title or "无标题" }}</a><br><span class="muted">@{{ item.account.username }}</span></td>
+              <td class="num delta-up">+{{ "{:,}".format(item.play_delta) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="empty">暂无数据</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if anomalies %}
+    <div class="panel">
+      <h2>异常检测</h2>
+      {% for item in anomalies %}
+      <div class="alert-item alert-{{ item.level }}">
+        <div class="alert-title">{{ item.title }}</div>
+        <div class="alert-msg">{{ item.message }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if rankings %}
+    <div class="panel">
+      <h2>账号排行</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>账号</th><th class="num">健康分</th><th class="num">24h播放</th><th class="num">粉丝变化</th></tr>
+        </thead>
+        <tbody>
+          {% for row in rankings %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/account/{{ row.account.id }}">@{{ row.account.username }}</a></td>
+            <td class="num"><span class="health-badge {{ row.health.color }}">{{ row.health.score }}</span></td>
+            <td class="num">{% if row.plays_delta > 0 %}+{{ "{:,}".format(row.plays_delta) }}{% else %}—{% endif %}</td>
+            <td class="num">{% if row.follower_delta != 0 %}{{ row.follower_delta }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if trend.labels %}
+  <script>
+    new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels: {{ trend.labels | tojson }},
+        datasets: [
+          { label: '播放', data: {{ trend.plays | tojson }}, borderColor: '#fe2c55', tension: 0.3 },
+          { label: '粉丝', data: {{ trend.followers | tojson }}, borderColor: '#69c0ff', tension: 0.3 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { ticks: { color: '#9aa0a6' }, grid: { color: '#2a2f3a' } }, y: { ticks: { color: '#9aa0a6' }, grid: { color: '#2a2f3a' } } },
+        plugins: { legend: { labels: { color: '#e8eaed' } } }
+      }
+    });
+  </script>
+  {% endif %}
+</body>
+</html>

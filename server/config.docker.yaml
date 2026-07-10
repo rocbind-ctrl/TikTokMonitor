@@ -1,0 +1,45 @@
+server:
+  host: "0.0.0.0"
+  port: 8099
+  mode: "web"
+
+security:
+  web_password: "change-me"
+  api_key: "change-me-random-long-token"
+
+monitor:
+  interval_minutes: 30
+  max_videos_per_account: 50
+  request_timeout: 120
+  day_timezone: "America/Los_Angeles"
+
+sync:
+  max_retries: 2
+  retry_backoff_seconds: 2
+  concurrent: true
+  max_workers: 3
+  sequential_delay_seconds: 1
+
+tiktok:
+  provider: "auto"
+  api_base: "https://tikwm.com/api"
+  proxy: ""
+
+alerts:
+  enabled: true
+  play_surge_threshold: 500
+  follower_drop_threshold: 10
+  cooldown_hours: 6
+  anomaly_detection: true
+
+intelligence:
+  anomaly_z_threshold: 2.5
+  health_score_enabled: true
+
+notifications:
+  enabled: false
+  webhook_url: ""
+  dingtalk_webhook: ""
+  telegram_bot_token: ""
+  telegram_chat_id: ""
+  bark_url: ""

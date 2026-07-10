@@ -1,0 +1,13 @@
+services:
+  tiktokmonitor-server:
+    build:
+      context: ./server
+    container_name: tiktokmonitor-server
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    volumes:
+      - tiktokmonitor-data:/app/data
+
+volumes:
+  tiktokmonitor-data:

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  {% include "_head.html" %}
+  <title>TikTok 监控</title>
+</head>
+<body class="app-body">
+  {% from "_macros.html" import play_gain, play_gain_num %}
+  {% include "_nav.html" %}
+  <div class="container container-wide">
+
+    {% if request.query_params.get('sync_msg') %}
+    {% set st = request.query_params.get('sync_status', 'info') %}
+    <div class="flash flash-{% if st == 'success' %}success{% elif st == 'error' %}error{% else %}info{% endif %}">{{ request.query_params.get('sync_msg') }}</div>
+    {% endif %}
+
+    <div class="dash-head">
+      <div>
+        <h1 class="dash-title">账号监控</h1>
+        <p class="dash-sub">共 {{ total_accounts }} 个账号 · 今日 {{ global_today.date_label }} · {{ global_today.tz_label }}{% if sync_queue_size %} · 同步队列 {{ sync_queue_size }}{% endif %}</p>
+      </div>
+      <div class="dash-head-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-sync-all>
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 10a7 7 0 1 1-2-5.2M17 3v4h-4"/></svg>
+          同步全部
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="toggleImport">批量导入</button>
+      </div>
+    </div>
+
+    <div class="stat-cards stat-cards-today stat-cards-4">
+      <div class="stat-card">
+        <span class="stat-card-lbl">今日新发视频</span>
+        <span class="stat-card-val">{{ global_today.total_videos }}</span>
+      </div>
+      <div class="stat-card stat-card-primary">
+        <span class="stat-card-lbl">今日播放增加</span>
+        <span class="stat-card-val">{{ play_gain_num(global_today.plays_increase) }}</span>
+      </div>
+      <div class="stat-card stat-card-green">
+        <span class="stat-card-lbl">今日已发账号</span>
+        <span class="stat-card-val">{{ global_today.posted_accounts }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-lbl">今日未发账号</span>
+        <span class="stat-card-val">{{ global_today.not_posted_accounts }}</span>
+      </div>
+    </div>
+
+    <div class="today-filter-row">
+      <span class="today-filter-label">今日发文</span>
+      <div class="sort-tabs">
+        <a href="/{{ query_suffix(post_today='', page=1) }}" class="{% if not current_post_today %}active{% endif %}">全部</a>
+        <a href="/{{ query_suffix(post_today='yes', page=1) }}" class="{% if current_post_today == 'yes' %}active{% endif %}">已发 ({% if has_filter_scope %}{{ filter_totals.posted_accounts }}{% else %}{{ global_today.posted_accounts }}{% endif %})</a>
+        <a href="/{{ query_suffix(post_today='no', page=1) }}" class="{% if current_post_today == 'no' %}active{% endif %}">未发 ({% if has_filter_scope %}{{ filter_totals.not_posted_accounts }}{% else %}{{ global_today.not_posted_accounts }}{% endif %})</a>
+      </div>
+      {% if current_post_today or current_group or current_phone or current_employee or current_search %}
+      <span class="today-filter-meta">筛选内：新发 {{ filter_totals.today_videos }} 条 · 新发播放 {{ "{:,}".format(filter_totals.today_new_plays) }} · 已发 {{ filter_totals.posted_accounts }} · 未发 {{ filter_totals.not_posted_accounts }} · 今日增播 {{ play_gain_num(filter_totals.plays_today) }}</span>
+      {% endif %}
+    </div>
+
+    {% if employee_report.rows %}
+    <section class="panel employee-panel">
+      <div class="panel-title-row">
+        <h3>员工发文与播放</h3>
+        <span class="muted">近 7 天 · {{ global_today.tz_label }} · 点击员工名筛选 · 播放为当日新发视频播放量合计</span>
+      </div>
+      <div class="employee-table-wrap">
+        <table class="employee-table employee-table-plays">
+          <thead>
+            <tr>
+              <th>员工</th>
+              <th class="num">账号</th>
+              <th class="num">今日已发</th>
+              <th class="num">今日新发播放</th>
+              <th class="num">今日增播</th>
+              {% for dl in employee_report.date_labels %}
+              <th class="num {% if loop.last %}col-today{% endif %}">{{ dl }}{% if loop.last %}<span class="today-mark">今</span>{% endif %}</th>
+              {% endfor %}
+              <th class="num">发文合计</th>
+              <th class="num">播放合计</th>
+            </tr>
+            <tr class="employee-subhead">
+              <th colspan="5"></th>
+              {% for dl in employee_report.date_labels %}
+              <th class="num th-sub {% if loop.last %}col-today{% endif %}">条/播放</th>
+              {% endfor %}
+              <th colspan="2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for er in employee_report.rows %}
+            <tr class="{% if current_employee == er.employee %}row-active{% endif %}">
+              <td><a href="/{{ query_suffix(employee=er.employee, page=1) }}" class="emp-link">{{ er.employee }}</a></td>
+              <td class="num">{{ er.account_count }}</td>
+              <td class="num">{{ er.posted_today }}/{{ er.account_count }}</td>
+              <td class="num plays-cell">{% if er.today_new_plays > 0 %}<strong>{{ "{:,}".format(er.today_new_plays) }}</strong>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td class="num gain-cell">{{ play_gain_num(er.today_plays_gain) }}</td>
+              {% for i in range(employee_report.days) %}
+              {% set c = er.daily_counts[i] %}
+              {% set p = er.daily_plays[i] %}
+              <td class="num day-cell {% if c > 0 %}has-post{% endif %} {% if loop.last %}col-today{% endif %}">
+                {% if c > 0 %}
+                <strong>{{ c }}</strong><span class="cell-plays">{{ "{:,}".format(p) }}</span>
+                {% else %}
+                <span class="muted">0</span>
+                {% endif %}
+              </td>
+              {% endfor %}
+              <td class="num"><strong>{{ er.total_period }}</strong></td>
+              <td class="num plays-cell"><strong>{{ "{:,}".format(er.total_plays_period) }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if group_stats %}
+    <section class="group-chips-wrap">
+      <span class="group-chips-label">大品类</span>
+      <div class="group-chips">
+        <a href="/" class="group-chip {% if not current_group %}active{% endif %}">全部</a>
+        {% for gs in group_stats %}
+        <a href="/{{ query_suffix(group=gs.group_name, page=1) }}" class="group-chip {% if current_group == gs.group_name %}active{% endif %}">
+          <span class="chip-name">{{ gs.group_name }}</span>
+          <span class="chip-meta">{{ gs.account_count }}号 · {{ play_gain(gs.plays_24h) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="panel add-panel">
+      <form id="addForm" class="add-row">
+        <input type="text" name="username" placeholder="添加账号：用户名或 TikTok 链接" required>
+        <input type="text" name="group_name" placeholder="大品类" list="groupList">
+        <input type="text" name="phone" placeholder="手机" list="phoneList">
+        <input type="text" name="employee" placeholder="员工" list="employeeList">
+        <input type="text" name="note" placeholder="备注">
+        <button type="submit" class="btn btn-primary" id="addBtn">添加</button>
+      </form>
+      <datalist id="groupList">{% for g in groups %}<option value="{{ g }}">{% endfor %}</datalist>
+      <datalist id="phoneList">{% for p in phones %}<option value="{{ p }}">{% endfor %}</datalist>
+      <datalist id="employeeList">{% for e in employees %}<option value="{{ e }}">{% endfor %}</datalist>
+    </section>
+
+    <div id="importPanel" class="panel import-panel" hidden>
+      <div class="panel-title-row">
+        <h3>批量导入</h3>
+        <button type="button" class="btn-icon-sm" id="closeImport" title="关闭">×</button>
+      </div>
+      <p class="hint-left">每行一个，支持用户名、@用户名 或 TikTok 链接<br>带标签：<code>链接或用户名,大品类,手机,员工,备注</code></p>
+      <form action="/accounts/batch-add" method="post">
+        <textarea name="raw" rows="6" placeholder="https://www.tiktok.com/@user1&#10;user2,美妆,手机1,张三,备注"></textarea>
+        <div class="add-row" style="margin-top:10px">
+          <input type="text" name="group_name" placeholder="默认大品类">
+          <input type="text" name="phone" placeholder="默认手机">
+          <input type="text" name="employee" placeholder="默认员工">
+          <button type="submit" class="btn btn-secondary">导入</button>
+        </div>
+      </form>
+    </div>
+
+    <form class="filter-row panel toolbar-panel" method="get" action="/">
+      {% if current_post_today %}<input type="hidden" name="post_today" value="{{ current_post_today }}">{% endif %}
+      {% if current_employee %}<input type="hidden" name="employee" value="{{ current_employee }}">{% endif %}
+      {% if current_sort and current_sort != 'plays_desc' %}<input type="hidden" name="sort" value="{{ current_sort }}">{% endif %}
+      <input type="search" name="q" value="{{ current_search }}" placeholder="搜用户名、大品类、手机、员工、备注…">
+      <select name="group">
+        <option value="">大品类</option>
+        {% for g in groups %}<option value="{{ g }}" {% if current_group == g %}selected{% endif %}>{{ g }}</option>{% endfor %}
+      </select>
+      <select name="phone">
+        <option value="">手机</option>
+        {% for p in phones %}<option value="{{ p }}" {% if current_phone == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+      </select>
+      <select name="employee">
+        <option value="">员工</option>
+        {% for e in employees %}<option value="{{ e }}" {% if current_employee == e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+        <option value="未分配" {% if current_employee == '未分配' %}selected{% endif %}>未分配</option>
+      </select>
+      <button type="submit" class="btn btn-secondary btn-sm">筛选</button>
+      {% if current_search or current_group or current_phone or current_employee or current_post_today %}
+      <a href="/" class="btn btn-ghost btn-sm">清除</a>
+      {% endif %}
+    </form>
+
+    <div class="toolbar-row">
+      <div class="sort-tabs">
+        {% for key, label in sort_options.items() %}
+        <a href="/{{ query_suffix(sort=key, page=1) }}" class="{% if current_sort == key %}active{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </div>
+      {% if filtered_total > 0 %}
+      <button type="button" class="btn btn-ghost btn-sm" id="toggleBulk">批量改标签 ({{ filtered_total }})</button>
+      {% endif %}
+    </div>
+
+    <div id="bulkPanel" class="panel bulk-panel" hidden>
+      <form method="post" action="/accounts/bulk-tag{{ query_suffix() }}" class="add-row">
+        <input type="text" name="group_name" placeholder="大品类（留空不改）" list="groupList">
+        <input type="text" name="phone" placeholder="手机（留空不改）" list="phoneList">
+        <input type="text" name="employee" placeholder="员工（留空不改）" list="employeeList">
+        <button type="submit" class="btn btn-secondary">应用到当前 {{ filtered_total }} 个账号</button>
+      </form>
+    </div>
+
+    {% if account_rows %}
+    <div class="acc-list panel">
+      <div class="acc-list-head">
+        <span class="col-user">账号</span>
+        <span class="col-tags">大品类 / 手机 / 员工 / 备注</span>
+        <span class="col-stat">粉丝</span>
+        <span class="col-stat">今日</span>
+        <span class="col-stat">新发播放</span>
+        <span class="col-stat">今日增播</span>
+        <span class="col-stat">总播放</span>
+        <span class="col-stat">24h</span>
+        <span class="col-act"></span>
+      </div>
+      {% for row in account_rows %}
+      {% set account = row.account %}
+      <div class="acc-row {% if account.id in syncing_ids %}row-syncing{% endif %} {% if row.posted_today %}row-posted-today{% else %}row-not-posted-today{% endif %}" data-account-id="{{ account.id }}">
+        <div class="col-user">
+          <a href="/account/{{ account.id }}" class="user-link">
+            {% if account.avatar_url %}
+            <img src="{{ account.avatar_url }}" class="acc-avatar-sm" alt="">
+            {% else %}
+            <span class="acc-avatar-sm acc-avatar-ph">{{ account.username[0]|upper }}</span>
+            {% endif %}
+            <span class="user-name">@{{ account.username }}</span>
+          </a>
+        </div>
+        <div class="col-tags tag-fields" data-account-id="{{ account.id }}">
+          <input type="text" class="tag-input" name="group_name" value="{{ account.group_name }}" placeholder="大品类" list="groupList" title="大品类">
+          <input type="text" class="tag-input" name="phone" value="{{ account.phone }}" placeholder="手机" list="phoneList" title="手机">
+          <input type="text" class="tag-input" name="employee" value="{{ account.employee }}" placeholder="员工" list="employeeList" title="员工">
+          <input type="text" class="tag-input tag-input-wide" name="note" value="{{ account.note }}" placeholder="备注" title="备注">
+        </div>
+        <div class="col-stat num" data-label="粉丝">{{ "{:,}".format(account.follower_count) }}</div>
+        <div class="col-stat today-col" data-label="今日">
+          {% if row.today_post_count > 0 %}
+          <span class="post-badge post-yes" title="{% for v in row.today_videos %}{{ v.title or '无标题' }}{% if not loop.last %} · {% endif %}{% endfor %}">+{{ row.today_post_count }}</span>
+          {% else %}
+          <span class="post-badge post-no">未发</span>
+          {% endif %}
+        </div>
+        <div class="col-stat num today-new-plays-val" data-label="新发播放"{% if row.today_latest_video %} title="{{ row.today_latest_video.title or '无标题' }} · {{ row.today_latest_video.published_at | fmt_time }} {{ day_tz_label() }}"{% endif %}>
+          {% if row.posted_today and row.today_new_plays > 0 %}{{ "{:,}".format(row.today_new_plays) }}{% else %}<span class="muted">—</span>{% endif %}
+        </div>
+        <div class="col-stat num gain-today-val" data-label="今日增播">{{ play_gain_num(row.growth.today_plays_increase) }}</div>
+        <div class="col-stat num plays-val" data-label="总播放">{{ "{:,}".format(row.total_plays) }}</div>
+        <div class="col-stat num gain-val" data-label="24h">{{ play_gain(row.growth.plays_increase) }}</div>
+        <div class="col-act">
+          <div class="col-act-inner">
+            <button type="button" class="btn-icon" data-sync-id="{{ account.id }}" title="同步">↻</button>
+            <button type="button" class="btn-icon btn-icon-danger" data-delete-id="{{ account.id }}" data-username="{{ account.username }}" title="删除">×</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+      {% if page > 1 %}<a href="/{{ query_suffix(page=page-1) }}" class="btn btn-ghost btn-sm">上一页</a>{% endif %}
+      <span class="page-info">第 {{ page }} / {{ total_pages }} 页</span>
+      {% if page < total_pages %}<a href="/{{ query_suffix(page=page+1) }}" class="btn btn-ghost btn-sm">下一页</a>{% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+      <p>{% if current_search or current_group or current_phone or current_employee %}没有匹配的账号{% else %}还没有账号，在上方添加{% endif %}</p>
+    </div>
+    {% endif %}
+
+  </div>
+  <script>
+    document.getElementById('toggleImport')?.addEventListener('click', function () {
+      document.getElementById('importPanel').hidden = !document.getElementById('importPanel').hidden;
+    });
+    document.getElementById('closeImport')?.addEventListener('click', function () {
+      document.getElementById('importPanel').hidden = true;
+    });
+    document.getElementById('toggleBulk')?.addEventListener('click', function () {
+      document.getElementById('bulkPanel').hidden = !document.getElementById('bulkPanel').hidden;
+    });
+  </script>
+</body>
+</html>

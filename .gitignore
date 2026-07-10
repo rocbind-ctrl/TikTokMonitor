@@ -32,6 +32,12 @@ replica_src/build/
 replica_src/dist/
 replica_src/dist_runtime_probe/
 
+# Desktop client generated files
+apps/desktop/node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
 # Analysis artifacts: keep the plan, ignore extracted binaries/cache
 analysis_artifacts/*
 !analysis_artifacts/REPLICA_PLAN.md

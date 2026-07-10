@@ -1,0 +1,7 @@
+{% macro play_gain(value) -%}
+{%- if value and value > 0 -%}+{{ "{:,}".format(value) }}{%- else -%}—{%- endif -%}
+{%- endmacro %}
+
+{% macro play_gain_num(value) -%}
+{%- if value and value > 0 -%}+{{ "{:,}".format(value) }}{%- else -%}0{%- endif -%}
+{%- endmacro %}
