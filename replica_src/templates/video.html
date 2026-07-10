@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  {% include "_head.html" %}
+  <title>视频详情 - TikTok 监控</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="app-body">
+  {% include "_nav.html" %}
+  <div class="container">
+    <a href="/account/{{ account.id }}" class="back-link">← 返回 @{{ account.username }}</a>
+
+    <header>
+      <div>
+        <h1>{{ video.title or "无标题" }}</h1>
+        <p class="subtitle">
+          <a href="/account/{{ account.id }}">@{{ account.username }}</a>
+          · 视频 ID: {{ video.video_id }}
+          {% if video.published_at %} · 发布 {{ video.published_at | fmt_time }} {{ day_tz_label() }}{% endif %}
+        </p>
+      </div>
+      <a href="https://www.tiktok.com/@{{ account.username }}/video/{{ video.video_id }}" target="_blank" class="btn btn-secondary">
+        在 TikTok 打开
+      </a>
+    </header>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">播放量</div>
+        <div class="value">{{ "{:,}".format(video.play_count) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">点赞</div>
+        <div class="value">{{ "{:,}".format(video.like_count) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">评论</div>
+        <div class="value">{{ "{:,}".format(video.comment_count) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">分享</div>
+        <div class="value">{{ "{:,}".format(video.share_count) }}</div>
+      </div>
+    </div>
+
+    {% if history_rows | length > 1 %}
+    <div class="panel">
+      <h2>播放量趋势</h2>
+      <div class="chart-wrap">
+        <canvas id="playChart"></canvas>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <h2>历史记录 ({{ history_rows | length }})</h2>
+      {% if history_rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>记录时间</th>
+            <th class="num">播放量</th>
+            <th class="num">点赞</th>
+            <th class="num">评论</th>
+            <th class="num">分享</th>
+            <th class="num">播放增量</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in history_rows %}
+          <tr>
+            <td>{{ row.record.recorded_at | fmt_dt }} {{ day_tz_label() }}</td>
+            <td class="num">{{ "{:,}".format(row.record.play_count) }}</td>
+            <td class="num">{{ "{:,}".format(row.record.like_count) }}</td>
+            <td class="num">{{ "{:,}".format(row.record.comment_count) }}</td>
+            <td class="num">{{ "{:,}".format(row.record.share_count) }}</td>
+            <td class="num">
+              {% if row.delta > 0 %}
+              <span style="color:#69f0ae">+{{ "{:,}".format(row.delta) }}</span>
+              {% elif row.delta < 0 %}
+              <span style="color:#ff8a80">{{ "{:,}".format(row.delta) }}</span>
+              {% else %}
+              0
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">暂无历史数据，等待下次自动同步后会记录变化</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if chart_labels | length > 1 %}
+  <script>
+    const ctx = document.getElementById('playChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: {{ chart_labels | tojson }},
+        datasets: [{
+          label: '播放量',
+          data: {{ chart_plays | tojson }},
+          borderColor: '#fe2c55',
+          backgroundColor: 'rgba(254, 44, 85, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#e8eaed' } }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#9aa0a6', maxRotation: 45 },
+            grid: { color: '#2a2f3a' }
+          },
+          y: {
+            ticks: { color: '#9aa0a6' },
+            grid: { color: '#2a2f3a' }
+          }
+        }
+      }
+    });
+  </script>
+  {% endif %}
+</body>
+</html>

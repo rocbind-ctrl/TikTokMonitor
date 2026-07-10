@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  {% include "_head.html" %}
+  <title>同步日志 - TikTok 监控</title>
+</head>
+<body class="app-body">
+  {% include "_nav.html" %}
+  <div class="container">
+    <header>
+      <div>
+        <h1>同步日志</h1>
+        <p class="subtitle">共 {{ total }} 条记录</p>
+      </div>
+      <form action="/sync/all" method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;b.textContent='同步中...';">
+        <button type="submit" class="btn btn-primary">立即同步全部</button>
+      </form>
+    </header>
+
+    <div class="panel">
+      {% if logs %}
+      <table>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>账号</th>
+            <th>状态</th>
+            <th class="num">视频</th>
+            <th class="num">耗时</th>
+            <th>消息</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td>{{ log.created_at | fmt_dt }} {{ day_tz_label() }}</td>
+            <td>{% if log.account %}<a href="/account/{{ log.account_id }}">@{{ log.account.username }}</a>{% else %}-{% endif %}</td>
+            <td>{% if log.status == "success" %}<span class="badge badge-success">成功</span>{% else %}<span class="badge badge-error">失败</span>{% endif %}</td>
+            <td class="num">{{ log.videos_updated }}</td>
+            <td class="num">{{ log.duration_seconds }}s</td>
+            <td>{{ log.message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if total_pages > 1 %}
+      <div class="pagination">
+        {% if page > 1 %}<a href="/logs?page={{ page - 1 }}">上一页</a>{% endif %}
+        <span>第 {{ page }} / {{ total_pages }} 页</span>
+        {% if page < total_pages %}<a href="/logs?page={{ page + 1 }}">下一页</a>{% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <p class="empty">暂无同步记录</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

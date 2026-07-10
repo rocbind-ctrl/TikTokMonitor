@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  {% include "_head.html" %}
+  <title>登录 - TikTok 监控</title>
+</head>
+<body class="login-page">
+  <div class="login-box">
+    <h1>TikTok 账号监控</h1>
+    <p class="subtitle">请输入访问密码以继续</p>
+    {% if error %}
+    <div class="flash flash-error">{{ error }}</div>
+    {% endif %}
+    <form action="/login" method="post">
+      <input type="password" name="password" placeholder="访问密码" required autofocus>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:14px">进入系统</button>
+    </form>
+  </div>
+</body>
+</html>

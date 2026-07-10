@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  {% include "_head.html" %}
+  <title>告警中心 - TikTok 监控</title>
+</head>
+<body class="app-body">
+  {% include "_nav.html" %}
+  <div class="container">
+    <header>
+      <div>
+        <h1>告警中心</h1>
+        <p class="subtitle">未读 {{ unread_count }} 条 · 共 {{ total }} 条</p>
+      </div>
+      {% if unread_count %}
+      <form action="/alerts/read-all" method="post">
+        <button type="submit" class="btn btn-secondary">全部标记已读</button>
+      </form>
+      {% endif %}
+    </header>
+
+    <div class="panel">
+      {% if alerts %}
+      <div class="alert-list" style="max-height:none">
+        {% for alert in alerts %}
+        <div class="alert-item alert-{{ alert.level }} {% if alert.is_read %}alert-read{% endif %}">
+          <div class="alert-title">
+            {{ alert.title }}
+            {% if not alert.is_read %}
+            <form action="/alerts/{{ alert.id }}/read" method="post" style="display:inline;float:right">
+              <button type="submit" class="btn-link">标记已读</button>
+            </form>
+            {% endif %}
+          </div>
+          <div class="alert-msg">{{ alert.message }}</div>
+          <div class="alert-meta">
+            {{ alert.created_at | fmt_dt }} {{ day_tz_label() }}
+            · {{ alert.alert_type }}
+            {% if alert.account_id %} · <a href="/account/{{ alert.account_id }}">查看账号</a>{% endif %}
+            {% if alert.video_id %} · <a href="/video/{{ alert.video_id }}">查看视频</a>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% if total_pages > 1 %}
+      <div class="pagination">
+        {% if page > 1 %}<a href="/alerts?page={{ page - 1 }}">上一页</a>{% endif %}
+        <span>第 {{ page }} / {{ total_pages }} 页</span>
+        {% if page < total_pages %}<a href="/alerts?page={{ page + 1 }}">下一页</a>{% endif %}
+      </div>
+      {% endif %}
+      {% else %}
+      <p class="empty">暂无告警记录</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

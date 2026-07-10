@@ -1,0 +1,37 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Runtime data and local secrets
+config.yaml
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Original binary and generated releases
+TikTokMonitor.exe
+*.exe
+*.zip
+release/
+
+# Replica runtime/generated files
+replica_src/config.yaml
+replica_src/data/
+replica_src/data_backup*/
+replica_src/build/
+replica_src/dist/
+replica_src/dist_runtime_probe/
+
+# Analysis artifacts: keep the plan, ignore extracted binaries/cache
+analysis_artifacts/*
+!analysis_artifacts/REPLICA_PLAN.md
