@@ -8,6 +8,18 @@ The migration scaffold is complete. The recovered Windows replica source is
 preserved under `replica_src/`, and the new cross-platform structure now exists
 beside it.
 
+Latest local commit:
+
+```text
+3c1cec2 Add server layout and Tauri desktop client
+```
+
+GitHub remote:
+
+```text
+Not configured yet
+```
+
 ## Completed
 
 - Recovered and verified the original Python/FastAPI application source.
@@ -28,6 +40,8 @@ beside it.
 - Validated frontend TypeScript/Vite production build.
 - Validated Tauri Rust shell with `cargo check`.
 - Built a local Windows ARM64 MSI with `npx tauri build --bundles msi`.
+- Copied the local Windows ARM64 installer to
+  `release/TikTokMonitor_Desktop_Windows_ARM64.msi`.
 
 ## Pending
 
