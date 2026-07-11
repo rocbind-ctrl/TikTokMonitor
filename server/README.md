@@ -52,6 +52,30 @@ The desktop client uses JSON APIs under `/api/*`, including:
 - `GET /api/settings`
 - `PATCH /api/settings`
 
+## V2 API
+
+New clients should prefer `/api/v2/*`. V2 responses use the compatible
+envelope `{ "ok": true, "data": ..., "error": null }`; paginated endpoints
+also include `meta` with `page`, `per_page`, `total`, and `total_pages`.
+
+- `POST /api/v2/auth/login`
+- `GET /api/v2/accounts?page=1&per_page=50`
+- `GET /api/v2/videos?page=1&per_page=50`
+- `GET /api/v2/alerts?page=1&per_page=50`
+- `GET /api/v2/sync/logs?page=1&per_page=50`
+
+The original `/api/*` endpoints remain available for existing clients during
+the migration.
+
+## API Tests
+
+Run the isolated API test suite with:
+
+```powershell
+cd server
+python -m unittest discover -s tests -v
+```
+
 ## Docker
 
 ```powershell

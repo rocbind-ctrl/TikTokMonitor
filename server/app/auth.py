@@ -8,7 +8,15 @@ from app.config import get_security_settings
 
 _sessions: set[str] = set()
 
-PUBLIC_PATHS = {"/login", "/api/health", "/api/auth/login", "/api/auth/session"}
+PUBLIC_PATHS = {
+    "/login",
+    "/api/health",
+    "/api/auth/login",
+    "/api/auth/session",
+    "/api/v2/health",
+    "/api/v2/auth/login",
+    "/api/v2/auth/session",
+}
 
 
 def create_session() -> str:
@@ -57,6 +65,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if check_access(request):
             return await call_next(request)
+        if path.startswith("/api/v2/"):
+            return JSONResponse(
+                status_code=401,
+                content={"ok": False, "data": None, "error": {"code": "unauthorized", "message": "Unauthorized"}},
+            )
         if path.startswith("/api/"):
             return JSONResponse(status_code=401, content={"error": "unauthorized"})
         return RedirectResponse(url="/login", status_code=303)

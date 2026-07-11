@@ -1,6 +1,6 @@
 # Next Tasks
 
-Updated: 2026-07-10
+Updated: 2026-07-11
 
 ## Immediate Tasks
 
@@ -32,43 +32,31 @@ Updated: 2026-07-10
    - Good low-cost choice: NAS Docker if the team already has VPN/LAN access.
    - Temporary choice: one fixed office computer that stays online.
 
-## Product Tasks
+## Completed Since Last Update
 
-1. Complete Tauri account detail view.
-   - Show account profile, recent videos, recent sync logs, and growth metrics.
+- Completed desktop account detail, video detail, batch import, safe settings,
+  and alert navigation/read workflows.
+- Added compatible V2 JSON API envelopes and page-based pagination for
+  accounts, videos, alerts, and sync logs.
+- Added isolated API tests for login, account CRUD, sync queue, alerts,
+  settings, and pagination.
+- Migrated the current desktop client API calls to `/api/v2/*`.
+- Added desktop pagination controls for V2 list metadata.
+- Added native SVG trend charts to account and video details.
+- Added alert level filtering and selected-alert bulk read actions.
 
-2. Complete video detail view.
-   - Show play/like/comment/share history and link back to the account.
+## Follow-up Product Tasks
 
-3. Add batch import in the desktop client.
-   - Reuse `POST /api/accounts/import`.
-   - Support default group, phone, and employee fields.
+1. Add saved filters and export workflows to the desktop client.
 
-4. Add settings page in the desktop client.
-   - Read from `GET /api/settings`.
-   - Save safe editable fields through `PATCH /api/settings`.
-
-5. Improve alert workflows.
-   - Filter unread alerts.
-   - Mark one alert as read.
-   - Jump from alert to account or video detail.
+2. Add richer dashboard analytics and anomaly views to the desktop client.
 
 ## Engineering Tasks
 
-1. Standardize JSON API response shape.
-   - Current APIs are usable but not fully uniform.
-   - Recommended target shape: `{ "ok": true, "data": ..., "error": null }`.
-
-2. Add pagination.
-   - Accounts, videos, alerts, and sync logs should not load all rows forever.
-
-3. Add API tests.
-   - Cover login, account CRUD, sync queue endpoints, alerts, and settings.
-
-4. Add backup workflow.
+1. Add backup workflow.
    - Document and script regular backups for `data/monitor.db`.
 
-5. Plan database migration.
+2. Plan database migration.
    - SQLite is fine for early use.
    - PostgreSQL is better once multiple people rely on the system every day.
 

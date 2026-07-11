@@ -1,6 +1,6 @@
 # TikTokMonitor Cross-Platform Migration Progress
 
-Updated: 2026-07-10
+Updated: 2026-07-11
 
 ## Current Status
 
@@ -11,7 +11,7 @@ beside it.
 Latest local commit:
 
 ```text
-3c1cec2 Add server layout and Tauri desktop client
+80ddce2 Document migration progress and next tasks
 ```
 
 GitHub remote:
@@ -42,13 +42,22 @@ Not configured yet
 - Built a local Windows ARM64 MSI with `npx tauri build --bundles msi`.
 - Copied the local Windows ARM64 installer to
   `release/TikTokMonitor_Desktop_Windows_ARM64.msi`.
+- Completed desktop account and video detail views, batch import, safe settings
+  editing, and alert workflows.
+- Added compatible `/api/v2/*` responses and pagination for accounts, videos,
+  alerts, and sync logs.
+- Added isolated API coverage for authentication, account CRUD, sync queue,
+  alerts, settings, and pagination.
+- Migrated the desktop client's current API calls to `/api/v2/*`.
+- Added desktop pagination controls, native SVG trend charts, and filtered/bulk
+  alert workflows.
 
 ## Pending
 
 - Publish the local repository to GitHub through GitHub Desktop.
 - Let GitHub Actions build cloud artifacts for Windows, macOS, and Linux.
-- Continue product work on account detail, video detail, batch import, settings,
-  and richer alert workflows in the Tauri client.
+- Continue product work such as saved filters and export workflows in the
+  Tauri client.
 
 ## Notes
 

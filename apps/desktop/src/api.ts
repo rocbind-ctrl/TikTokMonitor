@@ -35,9 +35,46 @@ export interface Account {
   follower_count?: number;
   videos: number;
   synced_videos?: number;
+  tiktok_video_count?: number;
   total_plays: number;
   engagement_rate: number;
   last_sync: string | null;
+}
+
+export interface AccountGrowth {
+  follower_delta: number;
+  likes_delta: number;
+  plays_delta: number;
+  today_plays_increase?: number;
+  hours: number;
+  baseline_hours?: number;
+  has_history?: boolean;
+}
+
+export interface VideoHistory {
+  id: number;
+  play_count: number;
+  like_count: number;
+  comment_count: number;
+  share_count: number;
+  recorded_at: string;
+}
+
+export interface Video {
+  id: number;
+  account_id: number;
+  video_id: string;
+  title: string;
+  cover_url?: string;
+  play_count: number;
+  like_count: number;
+  comment_count: number;
+  share_count: number;
+  published_at: string | null;
+  last_sync_at?: string | null;
+  account?: Pick<Account, "id" | "username" | "nickname">;
+  history?: VideoHistory[];
+  history_meta?: PageMeta;
 }
 
 export interface Alert {
@@ -63,6 +100,40 @@ export interface SyncLog {
   created_at: string;
 }
 
+export interface AccountDetail extends Account {
+  video_items: Video[];
+  logs: SyncLog[];
+  videos_meta?: PageMeta;
+  logs_meta?: PageMeta;
+  growth?: AccountGrowth;
+  trend?: {
+    labels: string[];
+    followers: number[];
+    plays: number[];
+  };
+}
+
+export interface PageMeta {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  meta: PageMeta;
+}
+
+export interface Settings {
+  monitor?: Record<string, unknown>;
+  sync?: Record<string, unknown>;
+  tiktok?: Record<string, unknown>;
+  alerts?: Record<string, unknown>;
+  intelligence?: Record<string, unknown>;
+  notifications?: Record<string, unknown>;
+}
+
 export interface ProviderHealth {
   provider: string;
   success_count?: number;
@@ -79,10 +150,17 @@ export interface SessionState {
   api_key_enabled: boolean;
 }
 
+interface ApiEnvelope<T> {
+  ok: boolean;
+  data: T;
+  error: { code?: string; message?: string } | null;
+  meta?: PageMeta;
+}
+
 export function createApiClient(baseUrl: string) {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
 
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: PageMeta }> {
     const response = await fetch(`${normalizedBase}${path}`, {
       credentials: "include",
       headers: {
@@ -92,47 +170,103 @@ export function createApiClient(baseUrl: string) {
       ...init
     });
 
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      // Keep the HTTP status message when the response body is not JSON.
+    }
+
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`;
-      try {
-        const body = await response.json();
-        message = body.message || body.detail || body.error || message;
-      } catch {
-        // Keep the HTTP status message.
+      if (body && typeof body === "object") {
+        const errorBody = body as { message?: string; detail?: string; error?: string | { message?: string } };
+        message =
+          errorBody.message ||
+          errorBody.detail ||
+          (typeof errorBody.error === "string" ? errorBody.error : errorBody.error?.message) ||
+          message;
       }
       throw new Error(message);
     }
 
-    return response.json() as Promise<T>;
+    if (path.startsWith("/api/v2/")) {
+      const envelope = body as ApiEnvelope<T>;
+      if (!envelope?.ok) {
+        throw new Error(envelope?.error?.message || "请求失败");
+      }
+      return { data: envelope.data, meta: envelope.meta };
+    }
+    return { data: body as T };
+  }
+
+  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return (await requestEnvelope<T>(path, init)).data;
+  }
+
+  async function requestPage<T>(path: string, init: RequestInit = {}): Promise<Paginated<T>> {
+    const response = await requestEnvelope<T[]>(path, init);
+    if (!response.meta) {
+      throw new Error("分页元数据缺失");
+    }
+    return { items: response.data, meta: response.meta };
   }
 
   return {
-    session: () => request<SessionState>("/api/auth/session", { method: "GET" }),
+    session: () => request<SessionState>("/api/v2/auth/session", { method: "GET" }),
     login: (password: string) =>
-      request<{ authenticated: boolean }>("/api/auth/login", {
+      request<{ authenticated: boolean }>("/api/v2/auth/login", {
         method: "POST",
         body: JSON.stringify({ password })
       }),
-    logout: () => request<{ authenticated: boolean }>("/api/auth/logout", { method: "POST" }),
-    health: () => request<Health>("/api/health", { method: "GET" }),
-    stats: () => request<Stats>("/api/stats", { method: "GET" }),
-    accounts: () => request<Account[]>("/api/accounts", { method: "GET" }),
-    alerts: () => request<Alert[]>("/api/alerts?limit=30", { method: "GET" }),
-    logs: () => request<SyncLog[]>("/api/sync/logs?limit=30", { method: "GET" }),
-    providers: () => request<ProviderHealth[]>("/api/providers/health", { method: "GET" }),
-    syncAll: () => request<{ status: string; message: string }>("/api/sync/all", { method: "POST" }),
+    logout: () => request<{ authenticated: boolean }>("/api/v2/auth/logout", { method: "POST" }),
+    health: () => request<Health>("/api/v2/health", { method: "GET" }),
+    stats: () => request<Stats>("/api/v2/stats", { method: "GET" }),
+    accounts: (page = 1, perPage = 50) =>
+      requestPage<Account>(`/api/v2/accounts?page=${page}&per_page=${perPage}`, { method: "GET" }),
+    account: (accountId: number, videoPage = 1, logPage = 1) =>
+      request<AccountDetail>(`/api/v2/accounts/${accountId}?video_page=${videoPage}&log_page=${logPage}`, { method: "GET" }),
+    video: (videoId: number, historyPage = 1) =>
+      request<Video>(`/api/v2/videos/${videoId}?history_page=${historyPage}`, { method: "GET" }),
+    alerts: (page = 1, perPage = 30, unreadOnly = false, level = "") =>
+      requestPage<Alert>(
+        `/api/v2/alerts?page=${page}&per_page=${perPage}&unread_only=${unreadOnly}&level=${encodeURIComponent(level)}`,
+        { method: "GET" }
+      ),
+    logs: (page = 1, perPage = 30) =>
+      requestPage<SyncLog>(`/api/v2/sync/logs?page=${page}&per_page=${perPage}`, { method: "GET" }),
+    providers: () => request<ProviderHealth[]>("/api/v2/providers/health", { method: "GET" }),
+    syncAll: () => request<{ status: string; message: string }>("/api/v2/sync/all", { method: "POST" }),
     syncAccount: (accountId: number) =>
-      request<{ status: string; message: string }>(`/api/accounts/${accountId}/sync`, {
+      request<{ status: string; message: string }>(`/api/v2/accounts/${accountId}/sync`, {
         method: "POST"
       }),
     markAlertRead: (alertId: number) =>
-      request<{ status: string }>(`/api/alerts/${alertId}/read`, { method: "POST" }),
+      request<{ id: number; is_read: boolean }>(`/api/v2/alerts/${alertId}/read`, { method: "POST" }),
     markAllAlertsRead: () =>
-      request<{ status: string; updated: number }>("/api/alerts/read-all", { method: "POST" }),
-    addAccount: (username: string, groupName = "") =>
-      request<{ status: string; message: string; account: Account }>("/api/accounts", {
+      request<{ updated: number }>("/api/v2/alerts/read-all", { method: "POST" }),
+    markAlertsRead: (ids: number[]) =>
+      request<{ updated: number; alert_ids: number[] }>("/api/v2/alerts/mark-read", {
         method: "POST",
-        body: JSON.stringify({ username, group_name: groupName })
-      })
+        body: JSON.stringify({ ids })
+      }),
+    addAccount: (username: string, groupName = "") =>
+      request<Account>("/api/v2/accounts", { method: "POST", body: JSON.stringify({ username, group_name: groupName }) }).then(
+        (account) => ({ status: "success", message: `@${account.username} 已添加`, account })
+      ),
+    importAccounts: (payload: {
+      raw: string;
+      group_name?: string;
+      phone?: string;
+      employee?: string;
+      sync?: boolean;
+    }) =>
+      request<{ added: number; updated: number; queued: number }>("/api/v2/import/accounts", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }),
+    settings: () => request<Settings>("/api/v2/settings", { method: "GET" }),
+    updateSettings: (payload: Settings) =>
+      request<Settings>("/api/v2/settings", { method: "PATCH", body: JSON.stringify(payload) }).then((settings) => ({ status: "success", settings }))
   };
 }

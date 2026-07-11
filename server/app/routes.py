@@ -5,6 +5,8 @@ import json
 
 import yaml
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -434,6 +436,454 @@ def _save_config(config: dict) -> None:
         yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+
+
+V2_MAX_PAGE_SIZE = 200
+
+
+def _v2_success(data, *, meta: dict | None = None, status_code: int = 200):
+    payload = {"ok": True, "data": data, "error": None}
+    if meta is not None:
+        payload["meta"] = meta
+    if status_code == 200:
+        return payload
+    return JSONResponse(status_code=status_code, content=payload)
+
+
+def _v2_error(code: str, message: str, *, status_code: int = 400):
+    return JSONResponse(
+        status_code=status_code,
+        content={"ok": False, "data": None, "error": {"code": code, "message": message}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/api/v2/"):
+        return _v2_error("validation_error", "Invalid request parameters", status_code=422)
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
+
+
+@app.exception_handler(HTTPException)
+async def http_error(request: Request, exc: HTTPException):
+    if request.url.path.startswith("/api/v2/"):
+        return _v2_error("http_error", str(exc.detail), status_code=exc.status_code)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
+def _v2_page(query, page: int, per_page: int):
+    page = max(1, page)
+    per_page = min(V2_MAX_PAGE_SIZE, max(1, per_page))
+    total = query.order_by(None).count()
+    rows = query.offset((page - 1) * per_page).limit(per_page).all()
+    return rows, {
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": (total + per_page - 1) // per_page,
+    }
+
+
+def _alert_payload(alert: Alert) -> dict:
+    return {
+        "id": alert.id,
+        "level": alert.level,
+        "type": alert.alert_type,
+        "title": alert.title,
+        "message": alert.message,
+        "is_read": bool(alert.is_read),
+        "account_id": alert.account_id,
+        "video_id": alert.video_id,
+        "created_at": _iso(alert.created_at),
+    }
+
+
+def _sync_log_payload(log: SyncLog) -> dict:
+    return {
+        "id": log.id,
+        "account_id": log.account_id,
+        "username": log.account.username if log.account else None,
+        "status": log.status,
+        "message": log.message,
+        "videos_updated": log.videos_updated,
+        "duration_seconds": log.duration_seconds,
+        "provider_used": log.provider_used,
+        "retry_count": log.retry_count,
+        "created_at": _iso(log.created_at),
+    }
+
+
+@app.get("/api/v2/health")
+def api_v2_health(db: Session = Depends(get_db)):
+    overview = system_overview(db)
+    return _v2_success(
+        {
+            "ok": True,
+            "version": APP_VERSION,
+            "scheduler": overview["scheduler"],
+            "accounts": overview["total_accounts"],
+            "active_accounts": overview["active_accounts"],
+            "unread_alerts": overview["unread_alerts"],
+        }
+    )
+
+
+@app.post("/api/v2/auth/login")
+async def api_v2_login(request: Request):
+    payload = await request.json()
+    expected = (get_security_settings().get("web_password") or "").strip()
+    if expected and str(payload.get("password") or "") != expected:
+        return _v2_error("invalid_credentials", "Invalid password", status_code=401)
+
+    token = create_session()
+    response = JSONResponse(content={"ok": True, "data": {"authenticated": True}, "error": None})
+    response.set_cookie(
+        "monitor_session",
+        token,
+        httponly=True,
+        max_age=86400 * 7,
+        samesite="lax",
+    )
+    return response
+
+
+@app.post("/api/v2/auth/logout")
+def api_v2_logout(request: Request):
+    destroy_session(request.cookies.get("monitor_session"))
+    response = JSONResponse(content={"ok": True, "data": {"authenticated": False}, "error": None})
+    response.delete_cookie("monitor_session")
+    return response
+
+
+@app.get("/api/v2/auth/session")
+def api_v2_session(request: Request):
+    from app.auth import check_access
+
+    return _v2_success(
+        {
+            "authenticated": check_access(request),
+            "auth_enabled": web_auth_enabled(),
+            "api_key_enabled": bool((get_security_settings().get("api_key") or "").strip()),
+        }
+    )
+
+
+@app.get("/api/v2/stats")
+def api_v2_stats(db: Session = Depends(get_db)):
+    overview = system_overview(db)
+    return _v2_success(
+        {
+            "version": APP_VERSION,
+            "total_accounts": overview["total_accounts"],
+            "active_accounts": overview["active_accounts"],
+            "total_videos": overview["total_videos"],
+            "total_plays": overview["total_plays"],
+            "unread_alerts": overview["unread_alerts"],
+            "last_sync_at": _iso(overview["last_sync_at"]),
+            "scheduler": overview["scheduler"],
+        }
+    )
+
+
+@app.get("/api/v2/accounts")
+def api_v2_list_accounts(page: int = 1, per_page: int = 50, db: Session = Depends(get_db)):
+    query = db.query(Account).options(joinedload(Account.videos)).order_by(Account.id)
+    rows, meta = _v2_page(query, page, per_page)
+    return _v2_success([_account_payload(account) for account in rows], meta=meta)
+
+
+@app.post("/api/v2/accounts")
+async def api_v2_create_account(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    username = normalize_username(str(payload.get("username") or ""))
+    if not username:
+        return _v2_error("invalid_username", "A TikTok username or profile URL is required")
+    existing = db.query(Account).filter(func.lower(Account.username) == username.lower()).first()
+    if existing:
+        return _v2_error("account_exists", f"@{username} is already monitored", status_code=409)
+
+    account = Account(
+        username=username,
+        group_name=str(payload.get("group_name") or payload.get("group") or "").strip(),
+        phone=str(payload.get("phone") or "").strip(),
+        employee=str(payload.get("employee") or "").strip(),
+        note=str(payload.get("note") or "").strip(),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    log_action(db, "add_account", f"@{username}", account_id=account.id)
+    db.commit()
+    if payload.get("sync", True):
+        enqueue_account_sync([account.id])
+    return _v2_success(_account_payload(account), status_code=201)
+
+
+@app.get("/api/v2/accounts/{account_id}")
+def api_v2_account_detail(
+    account_id: int,
+    video_page: int = 1,
+    video_per_page: int = 50,
+    log_page: int = 1,
+    log_per_page: int = 20,
+    db: Session = Depends(get_db),
+):
+    account = db.query(Account).options(joinedload(Account.videos)).filter(Account.id == account_id).first()
+    if not account:
+        return _v2_error("account_not_found", "Account not found", status_code=404)
+    payload = _account_payload(account)
+    payload["growth"] = account_growth(db, account)
+    payload["trend"] = account_follower_trend(db, account.id)
+    videos, videos_meta = _v2_page(
+        db.query(Video).filter(Video.account_id == account_id).order_by(desc(Video.published_at), desc(Video.id)),
+        video_page,
+        video_per_page,
+    )
+    logs, logs_meta = _v2_page(
+        db.query(SyncLog).filter(SyncLog.account_id == account_id).order_by(desc(SyncLog.created_at)),
+        log_page,
+        log_per_page,
+    )
+    payload["video_items"] = [_video_payload(video, include_account=False) for video in videos]
+    payload["videos_meta"] = videos_meta
+    payload["logs"] = [_sync_log_payload(log) for log in logs]
+    payload["logs_meta"] = logs_meta
+    return _v2_success(payload)
+
+
+@app.patch("/api/v2/accounts/{account_id}")
+async def api_v2_patch_account(account_id: int, request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        return _v2_error("account_not_found", "Account not found", status_code=404)
+    if "username" in payload:
+        username = normalize_username(str(payload.get("username") or ""))
+        if not username:
+            return _v2_error("invalid_username", "A valid username is required")
+        existing = db.query(Account).filter(func.lower(Account.username) == username.lower(), Account.id != account_id).first()
+        if existing:
+            return _v2_error("account_exists", f"@{username} is already monitored", status_code=409)
+        account.username = username
+    for attr, keys in {"group_name": ("group_name", "group"), "phone": ("phone",), "employee": ("employee",), "note": ("note",)}.items():
+        for key in keys:
+            if key in payload:
+                setattr(account, attr, str(payload.get(key) or "").strip())
+                break
+    if "is_active" in payload:
+        account.is_active = 1 if payload.get("is_active") else 0
+    log_action(db, "edit_account", f"@{account.username}", account_id=account.id)
+    db.commit()
+    db.refresh(account)
+    return _v2_success(_account_payload(account))
+
+
+@app.delete("/api/v2/accounts/{account_id}")
+def api_v2_delete_account(account_id: int, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        return _v2_error("account_not_found", "Account not found", status_code=404)
+    username = account.username
+    log_action(db, "delete_account", f"@{username}", account_id=account.id)
+    db.delete(account)
+    db.commit()
+    return _v2_success({"id": account_id, "message": f"@{username} deleted"})
+
+
+@app.get("/api/v2/videos")
+def api_v2_list_videos(account_id: int | None = None, page: int = 1, per_page: int = 50, db: Session = Depends(get_db)):
+    query = db.query(Video).options(joinedload(Video.account))
+    if account_id is not None:
+        query = query.filter(Video.account_id == account_id)
+    query = query.order_by(desc(Video.published_at), desc(Video.id))
+    rows, meta = _v2_page(query, page, per_page)
+    return _v2_success([_video_payload(video) for video in rows], meta=meta)
+
+
+@app.get("/api/v2/videos/{video_id}")
+def api_v2_video_detail(video_id: int, history_page: int = 1, history_per_page: int = 50, db: Session = Depends(get_db)):
+    video = db.query(Video).options(joinedload(Video.account)).filter(Video.id == video_id).first()
+    if not video:
+        return _v2_error("video_not_found", "Video not found", status_code=404)
+    history_query = db.query(VideoStatsHistory).filter(VideoStatsHistory.video_id == video_id).order_by(VideoStatsHistory.recorded_at)
+    history, history_meta = _v2_page(history_query, history_page, history_per_page)
+    payload = _video_payload(video)
+    payload["history"] = [
+        {
+            "id": row.id,
+            "play_count": row.play_count,
+            "like_count": row.like_count,
+            "comment_count": row.comment_count,
+            "share_count": row.share_count,
+            "recorded_at": _iso(row.recorded_at),
+        }
+        for row in history
+    ]
+    payload["history_meta"] = history_meta
+    return _v2_success(payload)
+
+
+@app.get("/api/v2/alerts")
+def api_v2_alerts(
+    page: int = 1,
+    per_page: int = 50,
+    unread_only: bool = False,
+    level: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Alert).order_by(desc(Alert.created_at))
+    if unread_only:
+        query = query.filter(Alert.is_read == 0)
+    if level:
+        query = query.filter(Alert.level == level)
+    rows, meta = _v2_page(query, page, per_page)
+    return _v2_success([_alert_payload(alert) for alert in rows], meta=meta)
+
+
+@app.post("/api/v2/alerts/{alert_id}/read")
+def api_v2_read_alert(alert_id: int, db: Session = Depends(get_db)):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        return _v2_error("alert_not_found", "Alert not found", status_code=404)
+    alert.is_read = 1
+    db.commit()
+    return _v2_success({"id": alert_id, "is_read": True})
+
+
+@app.post("/api/v2/alerts/read-all")
+def api_v2_read_all_alerts(db: Session = Depends(get_db)):
+    updated = db.query(Alert).filter(Alert.is_read == 0).update({"is_read": 1})
+    db.commit()
+    return _v2_success({"updated": updated})
+
+
+@app.post("/api/v2/alerts/mark-read")
+async def api_v2_mark_alerts_read(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    raw_ids = payload.get("ids") or []
+    try:
+        alert_ids = [int(alert_id) for alert_id in raw_ids]
+    except (TypeError, ValueError):
+        return _v2_error("invalid_alert_ids", "Alert IDs must be integers")
+    alert_ids = list(dict.fromkeys(alert_ids))
+    if not alert_ids:
+        return _v2_error("no_alert_ids", "At least one alert ID is required")
+    updated = db.query(Alert).filter(Alert.id.in_(alert_ids), Alert.is_read == 0).update(
+        {"is_read": 1}, synchronize_session=False
+    )
+    db.commit()
+    return _v2_success({"updated": updated, "alert_ids": alert_ids})
+
+
+@app.get("/api/v2/sync/logs")
+def api_v2_sync_logs(page: int = 1, per_page: int = 50, db: Session = Depends(get_db)):
+    query = db.query(SyncLog).options(joinedload(SyncLog.account)).order_by(desc(SyncLog.created_at))
+    rows, meta = _v2_page(query, page, per_page)
+    return _v2_success([_sync_log_payload(log) for log in rows], meta=meta)
+
+
+@app.post("/api/v2/accounts/{account_id}/sync")
+def api_v2_sync_account(account_id: int, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        return _v2_error("account_not_found", "Account not found", status_code=404)
+    enqueue_account_sync([account_id])
+    return _v2_success(
+        {"status": "success", "account_id": account_id, "message": f"@{account.username} queued for sync"}
+    )
+
+
+@app.post("/api/v2/sync/all")
+def api_v2_sync_all(db: Session = Depends(get_db)):
+    ids = [row.id for row in db.query(Account.id).filter(Account.is_active == 1).order_by(Account.id).all()]
+    if ids:
+        enqueue_account_sync(ids)
+    return _v2_success(
+        {
+            "status": "success",
+            "queued": len(ids),
+            "account_ids": ids,
+            "message": f"{len(ids)} accounts queued for sync",
+        }
+    )
+
+
+@app.get("/api/v2/providers/health")
+def api_v2_provider_health(db: Session = Depends(get_db)):
+    return _v2_success(provider_stats(db))
+
+
+@app.post("/api/v2/import/accounts")
+async def api_v2_import_accounts(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    raw = str(payload.get("raw") or payload.get("text") or "")
+    defaults = {
+        "group_name": str(payload.get("group_name") or payload.get("group") or "").strip(),
+        "phone": str(payload.get("phone") or "").strip(),
+        "employee": str(payload.get("employee") or "").strip(),
+    }
+    parsed_lines: list[dict] = []
+    seen: set[str] = set()
+    for line in raw.splitlines():
+        parsed = parse_batch_line(line)
+        if not parsed or parsed["username"].lower() in seen:
+            continue
+        seen.add(parsed["username"].lower())
+        parsed_lines.append(parsed)
+    if not parsed_lines:
+        return _v2_error("no_valid_accounts", "No valid account rows were found")
+    if len(parsed_lines) > 500:
+        return _v2_error("too_many_accounts", "A batch may contain at most 500 accounts")
+
+    existing_rows = {
+        row.username.lower(): row
+        for row in db.query(Account).filter(func.lower(Account.username).in_(list(seen))).all()
+    }
+    added_ids: list[int] = []
+    updated_ids: list[int] = []
+    for parsed in parsed_lines:
+        existing = existing_rows.get(parsed["username"].lower())
+        if existing:
+            apply_parsed_tags(existing, parsed, defaults)
+            updated_ids.append(existing.id)
+            continue
+        account = Account(
+            username=parsed["username"],
+            group_name=(parsed["group_name"] or defaults["group_name"]).strip(),
+            phone=(parsed["phone"] or defaults["phone"]).strip(),
+            employee=(parsed["employee"] or defaults["employee"]).strip(),
+            note=parsed.get("note", "").strip(),
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(account)
+        db.flush()
+        added_ids.append(account.id)
+    db.commit()
+    sync_ids = list(dict.fromkeys(added_ids + updated_ids))
+    if payload.get("sync", True) and sync_ids:
+        enqueue_account_sync(sync_ids)
+    return _v2_success(
+        {
+            "added": len(added_ids),
+            "updated": len(updated_ids),
+            "queued": len(sync_ids) if payload.get("sync", True) else 0,
+            "account_ids": sync_ids,
+        }
+    )
+
+
+@app.get("/api/v2/settings")
+def api_v2_get_settings():
+    return _v2_success(_public_settings())
+
+
+@app.patch("/api/v2/settings")
+async def api_v2_patch_settings(request: Request):
+    payload = await request.json()
+    config = _merge_config(load_config(), payload)
+    _save_config(config)
+    return _v2_success(_public_settings())
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1139,6 +1589,8 @@ def api_account_detail(account_id: int, db: Session = Depends(get_db)):
         }
         for log in logs
     ]
+    payload["growth"] = account_growth(db, account)
+    payload["trend"] = account_follower_trend(db, account.id)
     return payload
 
 
