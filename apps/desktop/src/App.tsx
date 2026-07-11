@@ -121,7 +121,12 @@ export default function App() {
       setLogsMeta(nextLogs.meta);
       setProviders(nextProviders);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "连接失败");
+      const detail = error instanceof Error ? error.message : "连接失败";
+      setMessage(
+        detail === "Failed to fetch"
+          ? `连接失败：${serverUrl}。请确认服务器地址、端口、防火墙，以及 Windows 安装版是否已更新到最新版本。`
+          : detail
+      );
     } finally {
       setBusy(false);
     }

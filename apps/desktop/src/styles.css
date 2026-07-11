@@ -16,6 +16,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 button,
@@ -33,6 +34,7 @@ button {
   display: grid;
   grid-template-columns: 280px 1fr;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -121,12 +123,18 @@ textarea {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .server-row input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   color: #f7fbfb;
   background: #21454d;
   border-color: #315963;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
 }
 
 .icon-button,
@@ -238,6 +246,7 @@ svg {
 .workspace {
   min-width: 0;
   padding: 28px;
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -246,6 +255,7 @@ svg {
   gap: 20px;
   align-items: center;
   margin-bottom: 22px;
+  flex-wrap: wrap;
 }
 
 h1,
@@ -340,12 +350,14 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .panel-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .page-controls {
@@ -396,6 +408,7 @@ h2 {
   gap: 14px;
   color: #405058;
   font-size: 13px;
+  flex-wrap: wrap;
 }
 
 .trend-legend span {
@@ -633,6 +646,7 @@ td span {
   gap: 12px;
   color: #6b7c84;
   font-size: 13px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 980px) {

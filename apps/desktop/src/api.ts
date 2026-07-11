@@ -1,3 +1,5 @@
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+
 export type ApiClient = ReturnType<typeof createApiClient>;
 
 export interface Health {
@@ -164,9 +166,14 @@ interface ApiEnvelope<T> {
 
 export function createApiClient(baseUrl: string, sessionToken = "") {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const isBrowserDev =
+    typeof window !== "undefined" &&
+    window.location.hostname === "127.0.0.1" &&
+    window.location.port === "1420";
+  const requestFetch = isBrowserDev ? window.fetch.bind(window) : tauriFetch;
 
   async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: PageMeta }> {
-    const response = await fetch(`${normalizedBase}${path}`, {
+    const response = await requestFetch(`${normalizedBase}${path}`, {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
