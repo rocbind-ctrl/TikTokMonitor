@@ -78,16 +78,62 @@ python -m unittest discover -s tests -v
 
 ## Docker
 
+Prepare a server-local config before the first Docker run. This file is mounted
+into the container and must not be committed to Git.
+
 ```powershell
-docker compose up --build
+Copy-Item server/config.example.yaml server/config.yaml
+```
+
+Edit `server/config.yaml` for production:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8099
+  mode: "web"
+
+security:
+  web_password: "replace-with-a-random-password"
+  api_key: "replace-with-a-random-long-token"
+```
+
+Then start the server from the repository root:
+
+```powershell
+docker compose up --build -d
 ```
 
 Data is stored in the named volume mounted at `/app/data`.
+
+Backups are written to the host `backups/` directory, which is ignored by Git:
+
+```powershell
+New-Item -ItemType Directory -Force backups
+docker compose exec tiktokmonitor-server python scripts/sqlite_backup.py backup --keep-days 30
+```
+
+To restore, stop the server first, then run the restore command with an explicit
+confirmation flag:
+
+```powershell
+docker compose stop tiktokmonitor-server
+docker compose run --rm tiktokmonitor-server python scripts/sqlite_backup.py restore /app/backups/monitor_YYYYMMDD_HHMMSS_utc.db --yes
+docker compose up -d
+```
+
+For local non-Docker runs:
+
+```powershell
+cd server
+python scripts/sqlite_backup.py backup --keep-days 30
+```
 
 ## Do Not Commit
 
 - `config.yaml`
 - `data/`
+- `backups/`
 - SQLite databases
 - build outputs
 - packaged executables

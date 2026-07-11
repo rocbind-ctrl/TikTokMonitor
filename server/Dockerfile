@@ -14,12 +14,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY scripts ./scripts
 COPY static ./static
 COPY templates ./templates
-COPY config.docker.yaml ./config.yaml
 COPY main.py ./main.py
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/backups
 
 EXPOSE 8099
 

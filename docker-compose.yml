@@ -7,6 +7,11 @@ services:
     ports:
       - "8099:8099"
     volumes:
+      - type: bind
+        source: ./server/config.yaml
+        target: /app/config.yaml
+        read_only: true
+      - ./backups:/app/backups
       - tiktokmonitor-data:/app/data
 
 volumes:

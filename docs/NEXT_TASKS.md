@@ -4,33 +4,24 @@ Updated: 2026-07-11
 
 ## Immediate Tasks
 
-1. Publish the local repository to GitHub with GitHub Desktop.
-   - Current local branch: `master`
-   - Current latest commit: `3c1cec2 Add server layout and Tauri desktop client`
-   - Recommended visibility: private
-   - Reason: source code, workflow history, and deployment notes should not be
-     public until passwords, API keys, and release process are reviewed.
+1. Review, commit, and push the Docker deployment and backup workflow updates.
 
-2. Push the committed code to GitHub.
-   - After publishing, verify that `git remote -v` shows an `origin` remote.
-   - Push `master` or rename it to `main` before push if the team prefers
-     GitHub's default branch naming.
+2. Prepare the first cloud server.
+   - Recommended baseline: Ubuntu 22.04/24.04 LTS, 2 CPU, 2-4 GB RAM,
+     30+ GB disk.
+   - Install Docker and Docker Compose.
 
-3. Run GitHub Actions.
-   - `Server Check` should compile and smoke-test the FastAPI server.
-   - `Desktop Build` should produce Windows, macOS, and Linux artifacts.
-   - Download and test each artifact before distributing to the team.
+3. Deploy the server with a host-local `server/config.yaml`.
+   - Keep production `security.web_password` and `security.api_key` outside
+     Git and outside the Docker image.
 
-4. Change deployment secrets before team use.
-   - Copy `server/config.example.yaml` to `server/config.yaml`.
-   - Change `security.web_password`.
-   - Change `security.api_key`.
-   - Keep `config.yaml` out of Git.
+4. Configure remote access.
+   - Internal testing can use port `8099`.
+   - Team use should prefer HTTPS reverse proxy, VPN, or fixed-IP allowlists.
 
-5. Choose the first team server location.
-   - Best long-term choice: cloud server or always-on internal server.
-   - Good low-cost choice: NAS Docker if the team already has VPN/LAN access.
-   - Temporary choice: one fixed office computer that stays online.
+5. Schedule regular backups.
+   - Use `server/scripts/sqlite_backup.py backup --keep-days 30`.
+   - Run a restore drill before relying on the server for team data.
 
 ## Completed Since Last Update
 
@@ -44,6 +35,14 @@ Updated: 2026-07-11
 - Added desktop pagination controls for V2 list metadata.
 - Added native SVG trend charts to account and video details.
 - Added alert level filtering and selected-alert bulk read actions.
+- Published the repository to GitHub and verified GitHub Actions for server
+  checks and desktop builds.
+- Rotated local deployment secrets in ignored config files.
+- Added Docker-safe config mounting so production secrets stay outside the
+  image.
+- Added SQLite backup and restore script for `data/monitor.db`.
+- Added Docker backup volume mapping to keep backups in the host `backups/`
+  directory.
 
 ## Follow-up Product Tasks
 
@@ -53,12 +52,12 @@ Updated: 2026-07-11
 
 ## Engineering Tasks
 
-1. Add backup workflow.
-   - Document and script regular backups for `data/monitor.db`.
-
-2. Plan database migration.
+1. Plan database migration.
    - SQLite is fine for early use.
    - PostgreSQL is better once multiple people rely on the system every day.
+
+2. Add production scheduler guidance.
+   - Document cron/systemd timer or cloud scheduler setup for regular backups.
 
 ## Current Local Artifacts
 

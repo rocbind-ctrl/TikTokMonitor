@@ -12,6 +12,8 @@ env/
 # Runtime data and local secrets
 config.yaml
 data/
+backups/
+server/backups/
 *.db
 *.db-shm
 *.db-wal
@@ -28,6 +30,7 @@ release/
 replica_src/config.yaml
 replica_src/data/
 replica_src/data_backup*/
+replica_src/backups/
 replica_src/build/
 replica_src/dist/
 replica_src/dist_runtime_probe/
