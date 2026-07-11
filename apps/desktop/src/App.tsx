@@ -100,18 +100,34 @@ export default function App() {
     setBusy(true);
     setMessage("");
     try {
-      const [nextSession, nextHealth, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] =
-        await Promise.all([
-          client.session(),
-          client.health(),
-          client.stats(),
-          client.accounts(accountPage),
-          client.alerts(alertPage, 30, unreadOnly, alertLevel),
-          client.logs(logPage),
-          client.providers()
-        ]);
+      const [nextSession, nextHealth] = await Promise.all([
+        client.session(),
+        client.health()
+      ]);
       setSession(nextSession);
       setHealth(nextHealth);
+
+      const nextAuthenticated = nextSession.authenticated || !nextSession.auth_enabled;
+      if (!nextAuthenticated) {
+        setStats(null);
+        setAccounts([]);
+        setAlerts([]);
+        setLogs([]);
+        setAccountsMeta(EMPTY_PAGE_META);
+        setAlertsMeta(EMPTY_PAGE_META);
+        setLogsMeta(EMPTY_PAGE_META);
+        setProviders([]);
+        setSelectedAlertIds([]);
+        return;
+      }
+
+      const [nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] = await Promise.all([
+        client.stats(),
+        client.accounts(accountPage),
+        client.alerts(alertPage, 30, unreadOnly, alertLevel),
+        client.logs(logPage),
+        client.providers()
+      ]);
       setStats(nextStats);
       setAccounts(nextAccounts.items);
       setAlerts(nextAlerts.items);
