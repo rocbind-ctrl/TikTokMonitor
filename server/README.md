@@ -78,6 +78,8 @@ python -m unittest discover -s tests -v
 
 ## Docker
 
+For cloud servers, see the full guide in `docs/CLOUD_DEPLOYMENT.md`.
+
 Prepare a server-local config before the first Docker run. This file is mounted
 into the container and must not be committed to Git.
 

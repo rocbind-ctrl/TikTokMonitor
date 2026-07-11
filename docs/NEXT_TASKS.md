@@ -10,6 +10,7 @@ Updated: 2026-07-11
    - Recommended baseline: Ubuntu 22.04/24.04 LTS, 2 CPU, 2-4 GB RAM,
      30+ GB disk.
    - Install Docker and Docker Compose.
+   - Follow `docs/CLOUD_DEPLOYMENT.md`.
 
 3. Deploy the server with a host-local `server/config.yaml`.
    - Keep production `security.web_password` and `security.api_key` outside
@@ -43,6 +44,8 @@ Updated: 2026-07-11
 - Added SQLite backup and restore script for `data/monitor.db`.
 - Added Docker backup volume mapping to keep backups in the host `backups/`
   directory.
+- Added a cloud deployment guide for Ubuntu + Docker deployment, backup,
+  restore, update, and rollback.
 
 ## Follow-up Product Tasks
 
@@ -56,8 +59,9 @@ Updated: 2026-07-11
    - SQLite is fine for early use.
    - PostgreSQL is better once multiple people rely on the system every day.
 
-2. Add production scheduler guidance.
-   - Document cron/systemd timer or cloud scheduler setup for regular backups.
+2. Run the first cloud deployment.
+   - Use `docs/CLOUD_DEPLOYMENT.md` after the server OS, access path, and
+     Docker availability are confirmed.
 
 ## Current Local Artifacts
 
