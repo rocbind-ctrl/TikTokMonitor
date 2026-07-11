@@ -15,7 +15,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.audit import log_action
-from app.auth import AuthMiddleware, create_session, destroy_session, web_auth_enabled
+from app.auth import AuthMiddleware, bearer_session_token, create_session, destroy_session, web_auth_enabled
 from app.deps import ensure_ytdlp
 from app.analytics import (
     account_follower_trend,
@@ -536,7 +536,7 @@ async def api_v2_login(request: Request):
         return _v2_error("invalid_credentials", "Invalid password", status_code=401)
 
     token = create_session()
-    response = JSONResponse(content={"ok": True, "data": {"authenticated": True}, "error": None})
+    response = JSONResponse(content={"ok": True, "data": {"authenticated": True, "session_token": token}, "error": None})
     response.set_cookie(
         "monitor_session",
         token,
@@ -549,7 +549,7 @@ async def api_v2_login(request: Request):
 
 @app.post("/api/v2/auth/logout")
 def api_v2_logout(request: Request):
-    destroy_session(request.cookies.get("monitor_session"))
+    destroy_session(bearer_session_token(request) or request.cookies.get("monitor_session"))
     response = JSONResponse(content={"ok": True, "data": {"authenticated": False}, "error": None})
     response.delete_cookie("monitor_session")
     return response

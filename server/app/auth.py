@@ -30,6 +30,14 @@ def destroy_session(token: str | None) -> None:
         _sessions.discard(token)
 
 
+def bearer_session_token(request: Request) -> str:
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() == "bearer":
+        return token.strip()
+    return ""
+
+
 def verify_api_key(request: Request) -> bool:
     settings = get_security_settings()
     key = (settings.get("api_key") or "").strip()
@@ -46,8 +54,9 @@ def web_auth_enabled() -> bool:
 def is_web_authenticated(request: Request) -> bool:
     if not web_auth_enabled():
         return True
-    token = request.cookies.get("monitor_session", "")
-    return token in _sessions
+    cookie_token = request.cookies.get("monitor_session", "")
+    header_token = bearer_session_token(request)
+    return cookie_token in _sessions or header_token in _sessions
 
 
 def check_access(request: Request) -> bool:

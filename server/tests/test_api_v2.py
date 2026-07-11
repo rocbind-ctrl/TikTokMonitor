@@ -79,7 +79,15 @@ class ApiV2TestCase(unittest.TestCase):
     def login(self):
         response = self.client.post("/api/v2/auth/login", json={"password": "test-password"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"ok": True, "data": {"authenticated": True}, "error": None})
+        body = response.json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["data"]["authenticated"])
+        self.assertTrue(body["data"]["session_token"])
+
+    def login_token(self) -> str:
+        response = self.client.post("/api/v2/auth/login", json={"password": "test-password"})
+        self.assertEqual(response.status_code, 200)
+        return response.json()["data"]["session_token"]
 
     def create_account(self, username: str) -> int:
         response = self.client.post(
@@ -136,6 +144,20 @@ class ApiV2TestCase(unittest.TestCase):
         deleted = self.client.delete(f"/api/v2/accounts/{first_id}")
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(deleted.json()["data"]["id"], first_id)
+
+    def test_v2_accepts_bearer_session_without_cookie(self):
+        token = self.login_token()
+        self.client.cookies.clear()
+
+        response = self.client.get("/api/v2/accounts", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+        logout = self.client.post("/api/v2/auth/logout", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(logout.status_code, 200)
+
+        rejected = self.client.get("/api/v2/accounts", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(rejected.status_code, 401)
 
     def test_v2_video_alert_logs_and_settings(self):
         self.login()

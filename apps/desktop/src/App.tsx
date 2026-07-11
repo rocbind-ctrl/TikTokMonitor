@@ -58,6 +58,9 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState(
     () => localStorage.getItem("tiktokmonitor.serverUrl") || DEFAULT_SERVER
   );
+  const [sessionToken, setSessionToken] = useState(
+    () => localStorage.getItem("tiktokmonitor.sessionToken") || ""
+  );
   const [draftServerUrl, setDraftServerUrl] = useState(serverUrl);
   const [password, setPassword] = useState("");
   const [session, setSession] = useState<SessionState | null>(null);
@@ -90,22 +93,22 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
-  const api = useMemo(() => createApiClient(serverUrl), [serverUrl]);
+  const api = useMemo(() => createApiClient(serverUrl, sessionToken), [serverUrl, sessionToken]);
   const authenticated = session ? session.authenticated || !session.auth_enabled : false;
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (client = api) => {
     setBusy(true);
     setMessage("");
     try {
       const [nextSession, nextHealth, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] =
         await Promise.all([
-          api.session(),
-          api.health(),
-          api.stats(),
-          api.accounts(accountPage),
-          api.alerts(alertPage, 30, unreadOnly, alertLevel),
-          api.logs(logPage),
-          api.providers()
+          client.session(),
+          client.health(),
+          client.stats(),
+          client.accounts(accountPage),
+          client.alerts(alertPage, 30, unreadOnly, alertLevel),
+          client.logs(logPage),
+          client.providers()
         ]);
       setSession(nextSession);
       setHealth(nextHealth);
@@ -132,9 +135,13 @@ export default function App() {
     setBusy(true);
     setMessage("");
     try {
-      await api.login(password);
+      const result = await api.login(password);
+      if (result.session_token) {
+        localStorage.setItem("tiktokmonitor.sessionToken", result.session_token);
+        setSessionToken(result.session_token);
+      }
       setPassword("");
-      await loadData();
+      await loadData(result.session_token ? createApiClient(serverUrl, result.session_token) : api);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "登录失败");
     } finally {
@@ -144,6 +151,8 @@ export default function App() {
 
   async function logout() {
     await api.logout();
+    localStorage.removeItem("tiktokmonitor.sessionToken");
+    setSessionToken("");
     setSession({ authenticated: false, auth_enabled: true, api_key_enabled: false });
     setView("dashboard");
   }
@@ -151,6 +160,8 @@ export default function App() {
   function saveServer() {
     const normalized = draftServerUrl.trim().replace(/\/+$/, "");
     localStorage.setItem("tiktokmonitor.serverUrl", normalized);
+    localStorage.removeItem("tiktokmonitor.sessionToken");
+    setSessionToken("");
     setServerUrl(normalized);
   }
 

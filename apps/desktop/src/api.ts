@@ -150,6 +150,11 @@ export interface SessionState {
   api_key_enabled: boolean;
 }
 
+export interface LoginResult {
+  authenticated: boolean;
+  session_token?: string;
+}
+
 interface ApiEnvelope<T> {
   ok: boolean;
   data: T;
@@ -157,7 +162,7 @@ interface ApiEnvelope<T> {
   meta?: PageMeta;
 }
 
-export function createApiClient(baseUrl: string) {
+export function createApiClient(baseUrl: string, sessionToken = "") {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
 
   async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: PageMeta }> {
@@ -165,6 +170,7 @@ export function createApiClient(baseUrl: string) {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         ...(init.headers || {})
       },
       ...init
@@ -215,7 +221,7 @@ export function createApiClient(baseUrl: string) {
   return {
     session: () => request<SessionState>("/api/v2/auth/session", { method: "GET" }),
     login: (password: string) =>
-      request<{ authenticated: boolean }>("/api/v2/auth/login", {
+      request<LoginResult>("/api/v2/auth/login", {
         method: "POST",
         body: JSON.stringify({ password })
       }),
