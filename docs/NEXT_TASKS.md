@@ -46,6 +46,8 @@ Updated: 2026-07-11
   directory.
 - Added a cloud deployment guide for Ubuntu + Docker deployment, backup,
   restore, update, and rollback.
+- Added a team usage guide for Web, desktop, server operations, backup,
+  restore, and troubleshooting.
 
 ## Follow-up Product Tasks
 

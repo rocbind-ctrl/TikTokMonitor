@@ -3,6 +3,8 @@
 This directory contains the FastAPI server used by the web UI and the new
 cross-platform desktop client.
 
+For team usage instructions, see `../docs/USER_GUIDE.md`.
+
 ## Local Run
 
 ```powershell
