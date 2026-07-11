@@ -173,15 +173,22 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
   const requestFetch = isBrowserDev ? window.fetch.bind(window) : tauriFetch;
 
   async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: PageMeta }> {
-    const response = await requestFetch(`${normalizedBase}${path}`, {
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
-        ...(init.headers || {})
-      },
-      ...init
-    });
+    const url = `${normalizedBase}${path}`;
+    let response: Response;
+    try {
+      response = await requestFetch(url, {
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          ...(init.headers || {})
+        },
+        ...init
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error || "未知错误");
+      throw new Error(`连接失败：${url}。底层错误：${detail}`);
+    }
 
     let body: unknown = null;
     try {

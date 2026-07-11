@@ -8,6 +8,14 @@
   text-rendering: optimizeLegibility;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -33,6 +41,8 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
+  width: 100%;
+  max-width: 100vw;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -41,6 +51,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 22px;
+  min-width: 0;
   padding: 24px;
   color: #f7fbfb;
   background: #17343b;
@@ -61,6 +72,8 @@ button {
 .brand strong,
 .brand span {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .brand span,
@@ -124,6 +137,11 @@ textarea {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.server-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
 }
 
 .server-row input {
@@ -245,6 +263,7 @@ svg {
 
 .workspace {
   min-width: 0;
+  max-width: 100%;
   padding: 28px;
   overflow-x: hidden;
 }
@@ -357,6 +376,9 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 220px;
+  min-width: 0;
+  justify-content: flex-end;
   flex-wrap: wrap;
 }
 
@@ -424,6 +446,7 @@ h2 {
 }
 
 .table-wrap {
+  max-width: 100%;
   overflow: auto;
 }
 

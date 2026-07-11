@@ -363,6 +363,8 @@ export default function App() {
               value={draftServerUrl}
               onChange={(event) => setDraftServerUrl(event.target.value)}
               placeholder={DEFAULT_SERVER}
+              title={draftServerUrl}
+              aria-label="服务器地址"
             />
             <button className="icon-button" title="保存服务器地址" onClick={saveServer}>
               <Server aria-hidden="true" />

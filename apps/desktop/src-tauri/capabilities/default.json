@@ -9,13 +9,13 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "http://170.106.117.104:8099"
+          "url": "http://170.106.117.104:8099/*"
         },
         {
-          "url": "http://127.0.0.1:8099"
+          "url": "http://127.0.0.1:8099/*"
         },
         {
-          "url": "http://localhost:8099"
+          "url": "http://localhost:8099/*"
         }
       ]
     }
