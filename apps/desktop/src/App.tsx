@@ -25,6 +25,7 @@ import {
   createApiClient,
   DashboardData,
   Health,
+  LogFilters,
   PageMeta,
   ProviderHealth,
   SessionState,
@@ -35,7 +36,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "account" | "video" | "import" | "settings";
+type View = "dashboard" | "account" | "video" | "alerts" | "logs" | "providers" | "import" | "settings";
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 
 function compactNumber(value: number | undefined) {
@@ -87,6 +88,7 @@ export default function App() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [alertLevel, setAlertLevel] = useState("");
   const [selectedAlertIds, setSelectedAlertIds] = useState<number[]>([]);
+  const [logFilters, setLogFilters] = useState<LogFilters>({});
   const [newUsername, setNewUsername] = useState("");
   const [newGroup, setNewGroup] = useState("");
   const [accountFilters, setAccountFilters] = useState<AccountFilters>({ sort: "plays_desc" });
@@ -132,7 +134,7 @@ export default function App() {
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
-        client.logs(logPage),
+        client.logs(logPage, 30, logFilters),
         client.providers()
       ]);
       setDashboard(nextDashboard);
@@ -154,7 +156,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [accountFilters, accountPage, alertLevel, alertPage, api, logPage, unreadOnly]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, logFilters, logPage, unreadOnly]);
 
   useEffect(() => {
     void loadData();
@@ -197,6 +199,11 @@ export default function App() {
   function updateAccountFilter(key: keyof AccountFilters, value: string) {
     setAccountFilters((current) => ({ ...current, [key]: value }));
     setAccountPage(1);
+  }
+
+  function updateLogFilter(key: keyof LogFilters, value: string) {
+    setLogFilters((current) => ({ ...current, [key]: value }));
+    setLogPage(1);
   }
 
   async function addAccount() {
@@ -435,6 +442,9 @@ export default function App() {
     dashboard: ["团队监控台", "集中服务器，多平台客户端。"],
     account: ["账号详情", "账号资料、增长与同步记录。"],
     video: ["视频详情", "视频指标与历史快照。"],
+    alerts: ["告警中心", "集中处理未读告警、异常提示和关联账号。"],
+    logs: ["同步日志", "按状态、采集源和关键词排查同步任务。"],
+    providers: ["采集源健康", "查看 provider 成功率、延迟和最近失败情况。"],
     import: ["批量导入账号", "每行一个账号，可附带分组、手机和员工。"],
     settings: ["设置", "仅显示可安全编辑的服务端配置。"]
   };
@@ -492,6 +502,18 @@ export default function App() {
           <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
             <Activity aria-hidden="true" />
             总览
+          </button>
+          <button className={view === "alerts" ? "active" : ""} disabled={!authenticated} onClick={() => setView("alerts")}>
+            <AlertTriangle aria-hidden="true" />
+            告警中心
+          </button>
+          <button className={view === "logs" ? "active" : ""} disabled={!authenticated} onClick={() => setView("logs")}>
+            <RefreshCcw aria-hidden="true" />
+            同步日志
+          </button>
+          <button className={view === "providers" ? "active" : ""} disabled={!authenticated} onClick={() => setView("providers")}>
+            <Server aria-hidden="true" />
+            采集源
           </button>
           <button className={view === "import" ? "active" : ""} disabled={!authenticated} onClick={() => setView("import")}>
             <FileUp aria-hidden="true" />
@@ -589,6 +611,55 @@ export default function App() {
               await loadData();
             }}
           />
+        ) : null}
+        {view === "alerts" ? (
+          <AlertsPage
+            alerts={visibleAlerts}
+            meta={alertsMeta}
+            page={alertPage}
+            stats={stats}
+            busy={busy}
+            authenticated={authenticated}
+            unreadOnly={unreadOnly}
+            alertLevel={alertLevel}
+            selectedAlertIds={selectedAlertIds}
+            onUnreadOnlyChange={(value) => {
+              setUnreadOnly(value);
+              setAlertPage(1);
+              setSelectedAlertIds([]);
+            }}
+            onAlertLevelChange={(value) => {
+              setAlertLevel(value);
+              setAlertPage(1);
+              setSelectedAlertIds([]);
+            }}
+            onToggleAlert={(alertId, selected) => setSelectedAlertIds((current) => selected ? [...new Set([...current, alertId])] : current.filter((id) => id !== alertId))}
+            onMarkSelected={() => void markSelectedAlertsRead()}
+            onReadAll={async () => {
+              await api.markAllAlertsRead();
+              await loadData();
+            }}
+            onPage={setAlertPage}
+            onAlert={(alert) => void handleAlert(alert)}
+          />
+        ) : null}
+        {view === "logs" ? (
+          <LogsPage
+            logs={logs}
+            meta={logsMeta}
+            page={logPage}
+            filters={logFilters}
+            providers={providers}
+            onFilterChange={updateLogFilter}
+            onClearFilters={() => {
+              setLogFilters({});
+              setLogPage(1);
+            }}
+            onPage={setLogPage}
+          />
+        ) : null}
+        {view === "providers" ? (
+          <ProvidersPage providers={providers} />
         ) : null}
         {view === "account" && accountDetail ? (
           <AccountPage
@@ -935,6 +1006,178 @@ function Dashboard({
         </section>
       </section>
     </>
+  );
+}
+
+function AlertsPage({
+  alerts,
+  meta,
+  page,
+  stats,
+  busy,
+  authenticated,
+  unreadOnly,
+  alertLevel,
+  selectedAlertIds,
+  onUnreadOnlyChange,
+  onAlertLevelChange,
+  onToggleAlert,
+  onMarkSelected,
+  onReadAll,
+  onPage,
+  onAlert
+}: {
+  alerts: Alert[];
+  meta: PageMeta;
+  page: number;
+  stats: Stats | null;
+  busy: boolean;
+  authenticated: boolean;
+  unreadOnly: boolean;
+  alertLevel: string;
+  selectedAlertIds: number[];
+  onUnreadOnlyChange: (value: boolean) => void;
+  onAlertLevelChange: (value: string) => void;
+  onToggleAlert: (alertId: number, selected: boolean) => void;
+  onMarkSelected: () => void;
+  onReadAll: () => Promise<void>;
+  onPage: (page: number) => void;
+  onAlert: (alert: Alert) => void;
+}) {
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<AlertTriangle />} label="未读告警" value={stats?.unread_alerts} detail="需要优先处理" />
+        <Metric icon={<CheckCircle2 />} label="当前列表" value={meta.total} detail={unreadOnly ? "仅未读" : "全部告警"} />
+        <Metric icon={<Users />} label="已选择" value={selectedAlertIds.length} detail="可批量标为已读" />
+        <Metric icon={<Activity />} label="当前页" value={alerts.length} detail={alertLevel || "全部级别"} />
+      </section>
+      <section className="panel">
+        <div className="panel-head">
+          <h2>告警中心</h2>
+          <div className="panel-actions">
+            <label className="check-label"><input type="checkbox" checked={unreadOnly} onChange={(event) => onUnreadOnlyChange(event.target.checked)} /> 只看未读</label>
+            <select className="filter-select" value={alertLevel} onChange={(event) => onAlertLevelChange(event.target.value)}>
+              <option value="">全部级别</option>
+              <option value="info">信息</option>
+              <option value="warning">警告</option>
+              <option value="error">错误</option>
+            </select>
+            <button className="text-button" disabled={busy || !authenticated || !selectedAlertIds.length} onClick={onMarkSelected}>标记所选已读</button>
+            <button className="text-button" disabled={busy || !authenticated || !stats?.unread_alerts} onClick={() => void onReadAll()}>全部已读</button>
+          </div>
+        </div>
+        <div className="stack-list rich-list">
+          {alerts.map((alert) => (
+            <article className={`list-item alert-item ${alert.is_read ? "" : "item-hot"}`} key={alert.id}>
+              <label className="alert-select"><input type="checkbox" checked={selectedAlertIds.includes(alert.id)} onChange={(event) => onToggleAlert(alert.id, event.target.checked)} aria-label="选择告警" /></label>
+              <button className="list-action" onClick={() => onAlert(alert)}>
+                <strong>{alert.title || alert.type}<span className={`level-badge level-${alert.level || "info"}`}>{alert.level || "info"}</span></strong>
+                <span>{alert.message}</span>
+                <small>{formatDate(alert.created_at)}{alert.account_id ? ` · 账号 #${alert.account_id}` : ""}{alert.video_id ? ` · 视频 #${alert.video_id}` : ""}{!alert.is_read ? " · 点击查看并标为已读" : ""}</small>
+              </button>
+            </article>
+          ))}
+          {!alerts.length ? <p className="empty-state">暂无符合条件的告警。</p> : null}
+        </div>
+        <PageControls meta={meta} page={page} onPage={onPage} />
+      </section>
+    </section>
+  );
+}
+
+function LogsPage({
+  logs,
+  meta,
+  page,
+  filters,
+  providers,
+  onFilterChange,
+  onClearFilters,
+  onPage
+}: {
+  logs: SyncLog[];
+  meta: PageMeta;
+  page: number;
+  filters: LogFilters;
+  providers: ProviderHealth[];
+  onFilterChange: (key: keyof LogFilters, value: string) => void;
+  onClearFilters: () => void;
+  onPage: (page: number) => void;
+}) {
+  const providerNames = Array.from(new Set(providers.map((provider) => provider.provider).filter(Boolean)));
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>同步日志</h2>
+        <span>{meta.total} 条</span>
+      </div>
+      <div className="log-filter-grid">
+        <input value={filters.q || ""} onChange={(event) => onFilterChange("q", event.target.value)} placeholder="搜索账号、消息、状态或采集源" />
+        <select className="filter-select" value={filters.status || ""} onChange={(event) => onFilterChange("status", event.target.value)}>
+          <option value="">全部状态</option>
+          <option value="success">成功</option>
+          <option value="error">错误</option>
+          <option value="warning">警告</option>
+        </select>
+        <select className="filter-select" value={filters.provider || ""} onChange={(event) => onFilterChange("provider", event.target.value)}>
+          <option value="">全部采集源</option>
+          {providerNames.map((provider) => <option value={provider} key={provider}>{provider}</option>)}
+        </select>
+        <button className="ghost-light-button" onClick={onClearFilters}>清除筛选</button>
+      </div>
+      <div className="table-wrap">
+        <table className="compact-table">
+          <thead><tr><th>时间</th><th>账号</th><th>状态</th><th>采集源</th><th>更新视频</th><th>重试</th><th>消息</th></tr></thead>
+          <tbody>
+            {logs.map((log) => (
+              <tr key={log.id}>
+                <td>{formatDate(log.created_at)}</td>
+                <td>{log.username || "系统"}</td>
+                <td><span className={`level-badge level-${log.status === "success" ? "info" : log.status || "warning"}`}>{log.status}</span></td>
+                <td>{log.provider_used || "-"}</td>
+                <td>{log.videos_updated || 0}</td>
+                <td>{log.retry_count || 0}</td>
+                <td>{log.message || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!logs.length ? <p className="empty-state">暂无符合条件的同步日志。</p> : null}
+      <PageControls meta={meta} page={page} onPage={onPage} />
+    </section>
+  );
+}
+
+function ProvidersPage({ providers }: { providers: ProviderHealth[] }) {
+  const available = providers.filter((provider) => provider.available !== false).length;
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<Server />} label="采集源" value={providers.length} detail={`${available} 个可用`} />
+        <Metric icon={<CheckCircle2 />} label="成功次数" value={providers.reduce((sum, provider) => sum + (provider.success_count || 0), 0)} detail="累计成功请求" />
+        <Metric icon={<AlertTriangle />} label="失败次数" value={providers.reduce((sum, provider) => sum + (provider.failure_count || 0), 0)} detail="累计失败请求" />
+        <Metric icon={<Activity />} label="连续失败" value={providers.reduce((sum, provider) => sum + (provider.consecutive_failures || 0), 0)} detail="达到阈值会降级" />
+      </section>
+      <section className="panel">
+        <div className="panel-head"><h2>Provider 健康状态</h2><span>{providers.length} 个</span></div>
+        <div className="provider-grid provider-grid-wide">
+          {providers.map((provider) => (
+            <article className={`provider-tile ${provider.available === false ? "provider-down" : ""}`} key={provider.provider}>
+              <strong>{provider.provider}<span className={provider.available === false ? "level-badge level-error" : "level-badge level-info"}>{provider.available === false ? "不可用" : "可用"}</span></strong>
+              <span>成功率 {provider.success_rate ?? 100}%</span>
+              <span>成功 {provider.success_count || 0} · 失败 {provider.failure_count || 0}</span>
+              <span>连续失败 {provider.consecutive_failures || 0}</span>
+              <span>平均延迟 {provider.avg_latency_ms || 0} ms</span>
+              <small>最近成功：{formatDate(provider.last_success_at || provider.last_success)}</small>
+              <small>最近失败：{formatDate(provider.last_failure_at || provider.last_failure)}</small>
+            </article>
+          ))}
+        </div>
+        {!providers.length ? <p className="empty-state">暂无采集源健康数据；完成同步后会开始记录。</p> : null}
+      </section>
+    </section>
   );
 }
 

@@ -69,6 +69,8 @@ def provider_stats(db: Session) -> list[dict]:
                 "available": _n(row.consecutive_failures) < 5,
                 "last_success": row.last_success_at,
                 "last_failure": row.last_failure_at,
+                "last_success_at": row.last_success_at,
+                "last_failure_at": row.last_failure_at,
             }
         )
     return result

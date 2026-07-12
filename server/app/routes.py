@@ -986,9 +986,41 @@ async def api_v2_mark_alerts_read(request: Request, db: Session = Depends(get_db
 
 
 @app.get("/api/v2/sync/logs")
-def api_v2_sync_logs(page: int = 1, per_page: int = 50, db: Session = Depends(get_db)):
+def api_v2_sync_logs(
+    page: int = 1,
+    per_page: int = 50,
+    status: str = "",
+    account_id: int | None = None,
+    provider: str = "",
+    q: str = "",
+    db: Session = Depends(get_db),
+):
     query = db.query(SyncLog).options(joinedload(SyncLog.account)).order_by(desc(SyncLog.created_at))
+    status = status.strip()
+    provider = provider.strip()
+    search = q.strip()
+    if status:
+        query = query.filter(SyncLog.status == status)
+    if account_id is not None:
+        query = query.filter(SyncLog.account_id == account_id)
+    if provider:
+        query = query.filter(SyncLog.provider_used.ilike(f"%{provider}%"))
+    if search:
+        like = f"%{search}%"
+        query = query.outerjoin(Account, SyncLog.account_id == Account.id).filter(
+            (SyncLog.message.ilike(like))
+            | (SyncLog.status.ilike(like))
+            | (SyncLog.provider_used.ilike(like))
+            | (Account.username.ilike(like))
+            | (Account.nickname.ilike(like))
+        )
     rows, meta = _v2_page(query, page, per_page)
+    meta["filters"] = {
+        "status": status,
+        "account_id": account_id,
+        "provider": provider,
+        "q": search,
+    }
     return _v2_success([_sync_log_payload(log) for log in rows], meta=meta)
 
 

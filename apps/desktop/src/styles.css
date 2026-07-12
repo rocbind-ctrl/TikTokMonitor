@@ -463,6 +463,13 @@ h2 {
   flex-wrap: wrap;
 }
 
+.log-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(130px, 160px)) auto;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 .page-controls {
   display: flex;
   align-items: center;
@@ -654,6 +661,39 @@ td small {
   align-items: start;
 }
 
+.rich-list .list-action strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.level-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.level-info,
+.level-success {
+  color: #0b5d41;
+  background: #dff6ec;
+}
+
+.level-warning {
+  color: #8a4b10;
+  background: #fff0db;
+}
+
+.level-error {
+  color: #8b2d1f;
+  background: #ffe2d8;
+}
+
 .alert-select {
   padding-top: 3px;
 }
@@ -693,6 +733,27 @@ td small {
 .provider-tile span {
   color: #5c6c73;
   font-size: 13px;
+}
+
+.provider-tile strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.provider-tile small {
+  color: #6b7c84;
+  font-size: 12px;
+}
+
+.provider-grid-wide {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.provider-down {
+  border-color: #ffd0c2;
+  background: #fff8f5;
 }
 
 .empty-state,
@@ -820,6 +881,7 @@ td small {
   .entry-row,
   .account-filter-grid,
   .bulk-tag-panel,
+  .log-filter-grid,
   .detail-metrics,
   .form-grid,
   .settings-grid {

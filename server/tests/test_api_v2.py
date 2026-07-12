@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import auth, routes
-from app.database import Account, AccountStatsHistory, Alert, Base, SyncLog, Video, VideoStatsHistory, get_db
+from app.database import Account, AccountStatsHistory, Alert, Base, ProviderHealth, SyncLog, Video, VideoStatsHistory, get_db
 
 
 class ApiV2TestCase(unittest.TestCase):
@@ -65,7 +65,7 @@ class ApiV2TestCase(unittest.TestCase):
     def setUp(self):
         db = self.Session()
         try:
-            for model in (VideoStatsHistory, AccountStatsHistory, Alert, SyncLog, Video, Account):
+            for model in (VideoStatsHistory, AccountStatsHistory, Alert, SyncLog, ProviderHealth, Video, Account):
                 db.query(model).delete()
             db.commit()
         finally:
@@ -299,7 +299,18 @@ class ApiV2TestCase(unittest.TestCase):
             alert = Alert(account_id=account_id, title="Play surge", message="Test", is_read=0)
             db.add(alert)
             db.add(Alert(account_id=account_id, level="error", title="Provider error", message="Test", is_read=0))
-            db.add(SyncLog(account_id=account_id, status="success", message="Done"))
+            db.add(SyncLog(account_id=account_id, status="success", message="Done", provider_used="tikwm"))
+            db.add(SyncLog(account_id=account_id, status="error", message="Provider failed", provider_used="direct"))
+            db.add(
+                ProviderHealth(
+                    provider="tikwm",
+                    success_count=9,
+                    failure_count=1,
+                    consecutive_failures=0,
+                    avg_latency_ms=123.4,
+                    last_success_at=datetime.now(timezone.utc),
+                )
+            )
             db.commit()
             video_id, alert_id = video.id, alert.id
         finally:
@@ -313,7 +324,7 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(detail.json()["data"]["history_meta"]["total"], 1)
         account = self.client.get(f"/api/v2/accounts/{account_id}")
         self.assertEqual(account.json()["data"]["videos_meta"]["total"], 1)
-        self.assertEqual(account.json()["data"]["logs_meta"]["total"], 1)
+        self.assertEqual(account.json()["data"]["logs_meta"]["total"], 2)
 
         alerts = self.client.get("/api/v2/alerts?unread_only=true")
         self.assertEqual(alerts.status_code, 200)
@@ -329,7 +340,12 @@ class ApiV2TestCase(unittest.TestCase):
 
         logs = self.client.get("/api/v2/sync/logs")
         self.assertEqual(logs.status_code, 200)
-        self.assertEqual(logs.json()["meta"]["total"], 1)
+        self.assertEqual(logs.json()["meta"]["total"], 2)
+        success_logs = self.client.get("/api/v2/sync/logs?status=success&provider=tikwm&q=Done")
+        self.assertEqual(success_logs.status_code, 200)
+        self.assertEqual(success_logs.json()["meta"]["total"], 1)
+        self.assertEqual(success_logs.json()["data"][0]["provider_used"], "tikwm")
+        self.assertEqual(success_logs.json()["meta"]["filters"]["status"], "success")
 
         settings = self.client.patch("/api/v2/settings", json={"monitor": {"interval_minutes": 45}})
         self.assertEqual(settings.status_code, 200)
@@ -340,6 +356,8 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(imported.json()["data"]["added"], 1)
         providers = self.client.get("/api/v2/providers/health")
         self.assertTrue(providers.json()["ok"])
+        self.assertEqual(providers.json()["data"][0]["success_rate"], 90.0)
+        self.assertIn("last_success_at", providers.json()["data"][0])
 
 
 if __name__ == "__main__":

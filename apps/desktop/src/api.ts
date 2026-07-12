@@ -106,6 +106,8 @@ export interface SyncLog {
   message: string;
   videos_updated: number;
   duration_seconds: number;
+  provider_used?: string;
+  retry_count?: number;
   created_at: string;
 }
 
@@ -151,8 +153,12 @@ export interface ProviderHealth {
   provider: string;
   success_count?: number;
   failure_count?: number;
+  success_rate?: number;
   consecutive_failures?: number;
   avg_latency_ms?: number;
+  available?: boolean;
+  last_success?: string | null;
+  last_failure?: string | null;
   last_success_at?: string | null;
   last_failure_at?: string | null;
 }
@@ -256,6 +262,13 @@ export interface AccountUpdate {
   employee?: string;
   note?: string;
   is_active?: boolean;
+}
+
+export interface LogFilters {
+  q?: string;
+  status?: string;
+  provider?: string;
+  account_id?: number | string;
 }
 
 export interface SessionState {
@@ -407,8 +420,16 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
         `/api/v2/alerts?page=${page}&per_page=${perPage}&unread_only=${unreadOnly}&level=${encodeURIComponent(level)}`,
         { method: "GET" }
       ),
-    logs: (page = 1, perPage = 30) =>
-      requestPage<SyncLog>(`/api/v2/sync/logs?page=${page}&per_page=${perPage}`, { method: "GET" }),
+    logs: (page = 1, perPage = 30, filters: LogFilters = {}) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(perPage)
+      });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+      });
+      return requestPage<SyncLog>(`/api/v2/sync/logs?${params.toString()}`, { method: "GET" });
+    },
     providers: () => request<ProviderHealth[]>("/api/v2/providers/health", { method: "GET" }),
     syncAll: () => request<{ status: string; message: string }>("/api/v2/sync/all", { method: "POST" }),
     syncAccount: (accountId: number) =>
