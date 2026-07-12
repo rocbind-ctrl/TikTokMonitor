@@ -25,6 +25,7 @@ import {
   createApiClient,
   DashboardData,
   Health,
+  InsightsData,
   LogFilters,
   PageMeta,
   ProviderHealth,
@@ -36,7 +37,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "account" | "video" | "alerts" | "logs" | "providers" | "import" | "settings";
+type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "import" | "settings";
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 
 function compactNumber(value: number | undefined) {
@@ -70,6 +71,7 @@ export default function App() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [insights, setInsights] = useState<InsightsData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -117,6 +119,7 @@ export default function App() {
       const nextAuthenticated = nextSession.authenticated || !nextSession.auth_enabled;
       if (!nextAuthenticated) {
         setDashboard(null);
+        setInsights(null);
         setStats(null);
         setAccounts([]);
         setAlerts([]);
@@ -129,8 +132,9 @@ export default function App() {
         return;
       }
 
-      const [nextDashboard, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] = await Promise.all([
+      const [nextDashboard, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] = await Promise.all([
         client.dashboard(),
+        client.insights(),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
@@ -138,6 +142,7 @@ export default function App() {
         client.providers()
       ]);
       setDashboard(nextDashboard);
+      setInsights(nextInsights);
       setStats(nextStats);
       setAccounts(nextAccounts.items);
       setAlerts(nextAlerts.items);
@@ -440,6 +445,7 @@ export default function App() {
   const visibleAlerts = unreadOnly ? alerts.filter((alert) => !alert.is_read) : alerts;
   const viewTitles: Record<View, [string, string]> = {
     dashboard: ["团队监控台", "集中服务器，多平台客户端。"],
+    insights: ["数据分析", "趋势、健康排行、异常检测和增长榜。"],
     account: ["账号详情", "账号资料、增长与同步记录。"],
     video: ["视频详情", "视频指标与历史快照。"],
     alerts: ["告警中心", "集中处理未读告警、异常提示和关联账号。"],
@@ -502,6 +508,10 @@ export default function App() {
           <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>
             <Activity aria-hidden="true" />
             总览
+          </button>
+          <button className={view === "insights" ? "active" : ""} disabled={!authenticated} onClick={() => setView("insights")}>
+            <VideoIcon aria-hidden="true" />
+            数据分析
           </button>
           <button className={view === "alerts" ? "active" : ""} disabled={!authenticated} onClick={() => setView("alerts")}>
             <AlertTriangle aria-hidden="true" />
@@ -610,6 +620,13 @@ export default function App() {
               await api.markAllAlertsRead();
               await loadData();
             }}
+          />
+        ) : null}
+        {view === "insights" ? (
+          <InsightsPage
+            insights={insights}
+            onAccount={(id) => void openAccount(id)}
+            onVideo={(id) => void openVideo(id)}
           />
         ) : null}
         {view === "alerts" ? (
@@ -1006,6 +1023,116 @@ function Dashboard({
         </section>
       </section>
     </>
+  );
+}
+
+function InsightsPage({
+  insights,
+  onAccount,
+  onVideo
+}: {
+  insights: InsightsData | null;
+  onAccount: (id: number) => void;
+  onVideo: (id: number) => void;
+}) {
+  if (!insights) return <p className="empty-state">正在加载数据分析…</p>;
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<Activity />} label="分析周期" value={insights.summary.days} detail="最近天数" />
+        <Metric icon={<Users />} label="健康排行" value={insights.summary.ranked_accounts} detail="已参与评分账号" />
+        <Metric icon={<AlertTriangle />} label="异常检测" value={insights.summary.anomalies} detail={`未读告警 ${insights.summary.unread_alerts}`} />
+        <Metric icon={<VideoIcon />} label="增长视频" value={insights.summary.gainers} detail="24h 播放增长 TOP" />
+      </section>
+
+      {insights.trend.labels.length ? (
+        <section className="panel">
+          <div className="panel-head"><h2>{insights.summary.days} 日趋势</h2><span>播放 / 粉丝</span></div>
+          <TrendChart
+            labels={insights.trend.labels}
+            series={[
+              { label: "播放", values: insights.trend.plays, color: "#f28c52" },
+              { label: "粉丝", values: insights.trend.followers, color: "#0c6e7e" }
+            ]}
+          />
+        </section>
+      ) : (
+        <section className="panel"><p className="empty-state">暂无趋势数据；完成多次同步后会生成趋势图。</p></section>
+      )}
+
+      <section className="analytics-grid">
+        <section className="panel">
+          <div className="panel-head"><h2>24h 播放增长 TOP</h2><span>{insights.gainers.length} 条</span></div>
+          <div className="stack-list">
+            {insights.gainers.map((item) => (
+              <article className="list-item" key={item.video.id}>
+                <button className="list-action" onClick={() => onVideo(item.video.id)}>
+                  <strong>{item.video.title || "无标题视频"}</strong>
+                  <span>@{item.account.username} · 当前 {compactNumber(item.current_plays)}</span>
+                  <small className="delta-up">+{compactNumber(item.play_delta)}</small>
+                </button>
+              </article>
+            ))}
+            {!insights.gainers.length ? <p className="empty-state">暂无 24h 播放增长数据。</p> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head"><h2>异常检测</h2><span>{insights.anomalies.length} 条</span></div>
+          <div className="stack-list rich-list">
+            {insights.anomalies.map((item, index) => (
+              <article className={`list-item item-hot anomaly-${item.level || "warning"}`} key={`${item.account.id}-${item.type}-${index}`}>
+                <button className="list-action" onClick={() => onAccount(item.account.id)}>
+                  <strong>{item.title}<span className={`level-badge level-${item.level || "warning"}`}>{item.level || "warning"}</span></strong>
+                  <span>{item.message}</span>
+                  <small>@{item.account.username}{item.z_score !== undefined ? ` · z=${item.z_score}` : ""}</small>
+                </button>
+              </article>
+            ))}
+            {!insights.anomalies.length ? <p className="empty-state">暂无异常检测结果。</p> : null}
+          </div>
+        </section>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head"><h2>账号健康排行</h2><span>{insights.rankings.length} 个账号</span></div>
+        <div className="table-wrap">
+          <table className="compact-table">
+            <thead><tr><th>#</th><th>账号</th><th>健康分</th><th>等级</th><th>24h 播放</th><th>粉丝变化</th><th>互动率</th><th>同步成功率</th></tr></thead>
+            <tbody>
+              {insights.rankings.map((row, index) => (
+                <tr key={row.account.id}>
+                  <td>{index + 1}</td>
+                  <td><button className="link-button" onClick={() => onAccount(row.account.id)}>@{row.account.username}</button><small>{row.account.group || row.account.employee || row.account.nickname || "未标注"}</small></td>
+                  <td><span className={`health-badge ${row.health.color || ""}`}>{row.health.score}</span></td>
+                  <td>{row.health.grade}</td>
+                  <td>{signedNumber(row.plays_delta_24h)}</td>
+                  <td>{signedNumber(row.follower_delta_24h)}</td>
+                  <td>{row.engagement}%</td>
+                  <td>{row.health.sync_rate ?? "-"}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!insights.rankings.length ? <p className="empty-state">暂无账号健康排行。</p> : null}
+      </section>
+
+      {insights.alerts.length ? (
+        <section className="panel">
+          <div className="panel-head"><h2>未读告警摘要</h2><span>{insights.alerts.length} 条</span></div>
+          <div className="stack-list rich-list">
+            {insights.alerts.map((alert) => (
+              <article className={`list-item ${alert.is_read ? "" : "item-hot"}`} key={alert.id}>
+                <strong>{alert.title || alert.type}<span className={`level-badge level-${alert.level || "info"}`}>{alert.level || "info"}</span></strong>
+                <span>{alert.message}</span>
+                <small>{formatDate(alert.created_at)}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </section>
   );
 }
 

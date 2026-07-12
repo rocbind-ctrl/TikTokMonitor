@@ -400,6 +400,12 @@ h2 {
   margin-bottom: 18px;
 }
 
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .compact-table {
   min-width: 680px;
 }
@@ -694,6 +700,42 @@ td small {
   background: #ffe2d8;
 }
 
+.health-badge {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 42px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #0b5d41;
+  background: #dff6ec;
+  font-weight: 800;
+}
+
+.health-a {
+  color: #0b5d41;
+  background: #dff6ec;
+}
+
+.health-b {
+  color: #075985;
+  background: #dff2ff;
+}
+
+.health-c {
+  color: #8a4b10;
+  background: #fff0db;
+}
+
+.health-d {
+  color: #8b2d1f;
+  background: #ffe2d8;
+}
+
+.delta-up {
+  color: #0b5d41;
+  font-weight: 800;
+}
+
 .alert-select {
   padding-top: 3px;
 }
@@ -878,6 +920,7 @@ td small {
 
   .metric-grid,
   .content-grid,
+  .analytics-grid,
   .entry-row,
   .account-filter-grid,
   .bulk-tag-panel,

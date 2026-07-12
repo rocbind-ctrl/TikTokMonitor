@@ -264,6 +264,58 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(second.json()["data"]["phone"], "Phone B")
         self.assertEqual(second.json()["data"]["employee"], "Bob")
 
+    def test_v2_insights_returns_trend_rankings_anomalies_and_gainers(self):
+        self.login()
+        account_id = self.create_account("insight-account")
+        now = datetime.now(timezone.utc)
+        db = self.Session()
+        try:
+            account = db.query(Account).filter(Account.id == account_id).first()
+            account.follower_count = 120
+            account.total_likes = 500
+            account.last_sync_at = now
+            video = Video(
+                account_id=account_id,
+                video_id="insight-video",
+                title="Insight video",
+                play_count=2000,
+                published_at=now - timedelta(hours=3),
+                last_sync_at=now,
+            )
+            db.add(video)
+            db.flush()
+            db.add(VideoStatsHistory(video_id=video.id, play_count=100, recorded_at=now - timedelta(hours=2)))
+            db.add(VideoStatsHistory(video_id=video.id, play_count=650, recorded_at=now))
+            for index, total in enumerate([760, 820, 900, 1000, 2000]):
+                db.add(
+                    AccountStatsHistory(
+                        account_id=account_id,
+                        follower_count=100 + index,
+                        total_plays=total,
+                        recorded_at=now - timedelta(hours=8 - index),
+                    )
+                )
+            db.add(Alert(account_id=account_id, level="warning", title="Insight alert", message="Check insight", is_read=0))
+            db.commit()
+            video_db_id = video.id
+        finally:
+            db.close()
+
+        response = self.client.get("/api/v2/insights?days=7&limit=10")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["ok"])
+        data = body["data"]
+        self.assertGreaterEqual(data["summary"]["ranked_accounts"], 1)
+        self.assertGreaterEqual(data["summary"]["unread_alerts"], 1)
+        self.assertTrue(data["trend"]["labels"])
+        self.assertEqual(data["rankings"][0]["account"]["id"], account_id)
+        self.assertIn("health", data["rankings"][0])
+        self.assertTrue(any(item["account"]["id"] == account_id for item in data["anomalies"]))
+        self.assertEqual(data["gainers"][0]["video"]["id"], video_db_id)
+        self.assertGreater(data["gainers"][0]["play_delta"], 0)
+        self.assertEqual(data["alerts"][0]["title"], "Insight alert")
+
     def test_v2_accepts_bearer_session_without_cookie(self):
         token = self.login_token()
         self.client.cookies.clear()

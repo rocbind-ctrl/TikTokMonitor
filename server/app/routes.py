@@ -553,6 +553,50 @@ def _group_stat_payload(row: dict) -> dict:
     }
 
 
+def _account_ref_payload(account: Account) -> dict:
+    return {
+        "id": account.id,
+        "username": account.username,
+        "nickname": account.nickname,
+        "avatar_url": account.avatar_url,
+        "group": account.group_name,
+        "employee": account.employee,
+    }
+
+
+def _ranking_payload(row: dict) -> dict:
+    account = row["account"]
+    return {
+        "account": _account_ref_payload(account),
+        "health": row.get("health") or {},
+        "total_plays": int(row.get("total_plays") or 0),
+        "follower_delta_24h": int(row.get("follower_delta") or 0),
+        "plays_delta_24h": int(row.get("plays_delta") or 0),
+        "engagement": row.get("engagement") or 0,
+    }
+
+
+def _anomaly_payload(item: dict) -> dict:
+    account = item["account"]
+    return {
+        "account": _account_ref_payload(account),
+        "type": item.get("type"),
+        "level": item.get("level"),
+        "title": item.get("title"),
+        "message": item.get("message"),
+        "z_score": item.get("z_score"),
+    }
+
+
+def _gainer_payload(item: dict) -> dict:
+    return {
+        "video": _video_payload(item["video"]),
+        "account": _account_ref_payload(item["account"]),
+        "play_delta": int(item.get("play_delta") or 0),
+        "current_plays": int(item.get("current_plays") or 0),
+    }
+
+
 def _account_filters_meta(
     *,
     group: str,
@@ -669,6 +713,38 @@ def api_v2_dashboard(db: Session = Depends(get_db)):
                 "queue_size": pending_sync_count(),
                 "syncing_ids": syncing_ids(),
             },
+        }
+    )
+
+
+@app.get("/api/v2/insights")
+def api_v2_insights(days: int = 7, limit: int = 10, db: Session = Depends(get_db)):
+    days = min(30, max(1, days))
+    limit = min(50, max(1, limit))
+    rankings = account_rankings(db, limit=limit)
+    anomalies = global_anomalies(db, limit=limit)
+    gainers = top_play_gainers(db, limit=limit, hours=24)
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.is_read == 0)
+        .order_by(desc(Alert.created_at))
+        .limit(10)
+        .all()
+    )
+    return _v2_success(
+        {
+            "summary": {
+                "ranked_accounts": len(rankings),
+                "anomalies": len(anomalies),
+                "gainers": len(gainers),
+                "unread_alerts": db.query(Alert).filter(Alert.is_read == 0).count(),
+                "days": days,
+            },
+            "trend": dashboard_trend(db, days=days),
+            "rankings": [_ranking_payload(row) for row in rankings],
+            "anomalies": [_anomaly_payload(item) for item in anomalies],
+            "gainers": [_gainer_payload(item) for item in gainers],
+            "alerts": [_alert_payload(alert) for alert in alerts],
         }
     )
 

@@ -245,6 +245,71 @@ export interface DashboardData {
   };
 }
 
+export interface InsightSummary {
+  ranked_accounts: number;
+  anomalies: number;
+  gainers: number;
+  unread_alerts: number;
+  days: number;
+}
+
+export interface InsightTrend {
+  labels: string[];
+  plays: number[];
+  followers: number[];
+}
+
+export interface InsightAccountRef {
+  id: number;
+  username: string;
+  nickname?: string;
+  avatar_url?: string;
+  group?: string;
+  employee?: string;
+}
+
+export interface InsightRanking {
+  account: InsightAccountRef;
+  health: {
+    score: number;
+    grade: string;
+    color?: string;
+    sync_rate?: number;
+    freshness?: number;
+    growth_score?: number;
+    engagement?: number;
+  };
+  total_plays: number;
+  follower_delta_24h: number;
+  plays_delta_24h: number;
+  engagement: number;
+}
+
+export interface InsightAnomaly {
+  account: InsightAccountRef;
+  type: string;
+  level: string;
+  title: string;
+  message: string;
+  z_score?: number;
+}
+
+export interface InsightGainer {
+  video: Video;
+  account: InsightAccountRef;
+  play_delta: number;
+  current_plays: number;
+}
+
+export interface InsightsData {
+  summary: InsightSummary;
+  trend: InsightTrend;
+  rankings: InsightRanking[];
+  anomalies: InsightAnomaly[];
+  gainers: InsightGainer[];
+  alerts: Alert[];
+}
+
 export interface AccountFilters {
   q?: string;
   group?: string;
@@ -389,6 +454,8 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     health: () => request<Health>("/api/v2/health", { method: "GET" }),
     stats: () => request<Stats>("/api/v2/stats", { method: "GET" }),
     dashboard: () => request<DashboardData>("/api/v2/dashboard", { method: "GET" }),
+    insights: (days = 7, limit = 10) =>
+      request<InsightsData>(`/api/v2/insights?days=${days}&limit=${limit}`, { method: "GET" }),
     accounts: (page = 1, perPage = 50, filters: AccountFilters = {}) => {
       const params = new URLSearchParams({
         page: String(page),
