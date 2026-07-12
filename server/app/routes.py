@@ -560,7 +560,8 @@ def _account_filters_meta(
     employee: str,
     search: str,
     post_today: str,
-    sort: str,
+    status: str = "active",
+    sort: str = "plays_desc",
 ) -> dict:
     return {
         "group": group,
@@ -568,6 +569,7 @@ def _account_filters_meta(
         "employee": employee,
         "q": search,
         "post_today": post_today,
+        "status": status,
         "sort": sort,
     }
 
@@ -680,6 +682,7 @@ def api_v2_list_accounts(
     phone: str = "",
     employee: str = "",
     post_today: str = "",
+    status: str = "active",
     sort: str = "plays_desc",
     db: Session = Depends(get_db),
 ):
@@ -688,12 +691,15 @@ def api_v2_list_accounts(
     phone = phone.strip()
     employee = employee.strip()
     post_today = post_today.strip()
+    status = status.strip().lower()
     if post_today not in ("", "yes", "no"):
         post_today = ""
+    if status not in ("active", "inactive", "all"):
+        status = "active"
     if sort not in ACCOUNT_SORT_OPTIONS:
         sort = "plays_desc"
     per_page = min(V2_MAX_PAGE_SIZE, max(1, per_page))
-    metrics = load_active_accounts_metrics(db)
+    metrics = load_active_accounts_metrics(db, status=status)
     rows, total, filter_totals, page = query_accounts(
         db,
         group=group,
@@ -701,6 +707,7 @@ def api_v2_list_accounts(
         employee=employee,
         search=search,
         post_today=post_today,
+        status=status,
         sort=sort,
         page=page,
         per_page=per_page,
@@ -717,6 +724,7 @@ def api_v2_list_accounts(
             employee=employee,
             search=search,
             post_today=post_today,
+            status=status,
             sort=sort,
         ),
         "filter_totals": filter_totals,
@@ -767,6 +775,58 @@ async def api_v2_create_account(request: Request, db: Session = Depends(get_db))
     if payload.get("sync", True):
         enqueue_account_sync([account.id])
     return _v2_success(_account_payload(account), status_code=201)
+
+
+@app.post("/api/v2/accounts/bulk-tag")
+async def api_v2_bulk_tag_accounts(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    filters = payload.get("filters") or {}
+    updates = payload.get("updates") or {}
+    if not isinstance(filters, dict) or not isinstance(updates, dict):
+        return _v2_error("invalid_payload", "Filters and updates must be objects")
+
+    update_fields: dict[str, str] = {}
+    for attr, keys in {"group_name": ("group_name", "group"), "phone": ("phone",), "employee": ("employee",), "note": ("note",)}.items():
+        for key in keys:
+            if key in updates:
+                update_fields[attr] = str(updates.get(key) or "").strip()
+                break
+    if not update_fields:
+        return _v2_error("no_updates", "At least one tag field is required")
+
+    search = str(filters.get("q") or filters.get("search") or "").strip()
+    group = str(filters.get("group") or filters.get("group_name") or "").strip()
+    phone = str(filters.get("phone") or "").strip()
+    employee = str(filters.get("employee") or "").strip()
+    post_today = str(filters.get("post_today") or "").strip()
+    status = str(filters.get("status") or "active").strip().lower()
+    if post_today not in ("", "yes", "no"):
+        post_today = ""
+    if status not in ("active", "inactive", "all"):
+        status = "active"
+
+    metrics = load_active_accounts_metrics(db, status=status)
+    rows, _, _, _ = query_accounts(
+        db,
+        group=group,
+        phone=phone,
+        employee=employee,
+        search=search,
+        post_today=post_today,
+        status=status,
+        sort="plays_desc",
+        page=1,
+        per_page=max(1, len(metrics["accounts"])),
+        metrics=metrics,
+    )
+    account_ids = [row["account"].id for row in rows]
+    if account_ids:
+        for account in db.query(Account).filter(Account.id.in_(account_ids)).all():
+            for attr, value in update_fields.items():
+                setattr(account, attr, value)
+        log_action(db, "bulk_tag_accounts", f"Updated {len(account_ids)} accounts")
+        db.commit()
+    return _v2_success({"updated": len(account_ids), "account_ids": account_ids})
 
 
 @app.get("/api/v2/accounts/{account_id}")

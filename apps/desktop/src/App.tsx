@@ -19,6 +19,7 @@ import {
 import {
   Account,
   AccountDetail,
+  AccountUpdate,
   Alert,
   AccountFilters,
   createApiClient,
@@ -239,6 +240,67 @@ export default function App() {
       await loadData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "同步失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateAccount(accountId: number, payload: AccountUpdate) {
+    setBusy(true);
+    try {
+      const account = await api.updateAccount(accountId, payload);
+      setAccounts((current) => current.map((item) => item.id === accountId ? { ...item, ...account } : item));
+      setAccountDetail((current) => current?.id === accountId ? { ...current, ...account } : current);
+      setMessage("账号信息已保存");
+      await loadData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "保存账号信息失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bulkUpdateAccounts(updates: AccountUpdate) {
+    if (!window.confirm(`确定要批量更新当前筛选出的 ${accountsMeta.total} 个账号吗？`)) return;
+    setBusy(true);
+    try {
+      const result = await api.bulkUpdateAccounts(accountFilters, updates);
+      setMessage(`批量更新完成：${result.updated} 个账号`);
+      await loadData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "批量更新失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAccount(account: Account) {
+    if (!window.confirm(`确定删除 @${account.username} 吗？该操作会删除本地账号和关联记录。`)) return;
+    setBusy(true);
+    try {
+      await api.deleteAccount(account.id);
+      setMessage(`@${account.username} 已删除`);
+      if (accountDetail?.id === account.id) {
+        setAccountDetail(null);
+        setView("dashboard");
+      }
+      await loadData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除账号失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleAccountActive(account: Account) {
+    setBusy(true);
+    try {
+      const nextActive = !account.is_active;
+      await api.updateAccount(account.id, { is_active: nextActive });
+      setMessage(`@${account.username} 已${nextActive ? "启用" : "停用"}`);
+      await loadData();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "更新账号状态失败");
     } finally {
       setBusy(false);
     }
@@ -516,6 +578,10 @@ export default function App() {
             onLogPage={setLogPage}
             onAdd={() => void addAccount()}
             onSync={(id) => void syncOne(id)}
+            onUpdateAccount={(id, payload) => void updateAccount(id, payload)}
+            onBulkUpdate={(updates) => void bulkUpdateAccounts(updates)}
+            onToggleActive={(account) => void toggleAccountActive(account)}
+            onDeleteAccount={(account) => void deleteAccount(account)}
             onOpenAccount={(id) => void openAccount(id)}
             onAlert={(alert) => void handleAlert(alert)}
             onReadAll={async () => {
@@ -590,6 +656,10 @@ function Dashboard({
   onLogPage,
   onAdd,
   onSync,
+  onUpdateAccount,
+  onBulkUpdate,
+  onToggleActive,
+  onDeleteAccount,
   onOpenAccount,
   onAlert,
   onReadAll
@@ -626,6 +696,10 @@ function Dashboard({
   onLogPage: (page: number) => void;
   onAdd: () => void;
   onSync: (id: number) => void;
+  onUpdateAccount: (id: number, payload: AccountUpdate) => void;
+  onBulkUpdate: (updates: AccountUpdate) => void;
+  onToggleActive: (account: Account) => void;
+  onDeleteAccount: (account: Account) => void;
   onOpenAccount: (id: number) => void;
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
@@ -634,8 +708,21 @@ function Dashboard({
   const sortOptions = options.sort_options || accountsMeta.sort_options || {};
   const progress = dashboard?.sync.progress;
   const syncBusy = Boolean(progress?.running || (dashboard?.sync.queue_size || 0) > 0);
+  const [bulkTags, setBulkTags] = useState({ group_name: "", phone: "", employee: "", note: "" });
+  const hasBulkUpdates = Object.values(bulkTags).some((value) => value.trim());
+  const submitBulkUpdate = () => {
+    const updates: AccountUpdate = {};
+    if (bulkTags.group_name.trim()) updates.group_name = bulkTags.group_name.trim();
+    if (bulkTags.phone.trim()) updates.phone = bulkTags.phone.trim();
+    if (bulkTags.employee.trim()) updates.employee = bulkTags.employee.trim();
+    if (bulkTags.note.trim()) updates.note = bulkTags.note.trim();
+    if (!Object.keys(updates).length) return;
+    onBulkUpdate(updates);
+    setBulkTags({ group_name: "", phone: "", employee: "", note: "" });
+  };
   const clearAccountFilters = () => {
     (["q", "group", "phone", "employee", "post_today"] as (keyof AccountFilters)[]).forEach((key) => onAccountFilterChange(key, ""));
+    onAccountFilterChange("status", "active");
     onAccountFilterChange("sort", "plays_desc");
   };
   return (
@@ -754,26 +841,47 @@ function Dashboard({
               <option value="yes">今日已发</option>
               <option value="no">今日未发</option>
             </select>
+            <select className="filter-select" value={accountFilters.status || "active"} onChange={(event) => onAccountFilterChange("status", event.target.value)}>
+              <option value="active">启用账号</option>
+              <option value="inactive">停用账号</option>
+              <option value="all">全部状态</option>
+            </select>
             <select className="filter-select" value={accountFilters.sort || "plays_desc"} onChange={(event) => onAccountFilterChange("sort", event.target.value)}>
               {Object.entries(sortOptions).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
             </select>
             <button className="ghost-light-button" onClick={clearAccountFilters}>清除筛选</button>
+          </div>
+          <div className="bulk-tag-panel">
+            <span>批量修改当前筛选结果（{accountsMeta.total} 个）</span>
+            <input value={bulkTags.group_name} onChange={(event) => setBulkTags((current) => ({ ...current, group_name: event.target.value }))} placeholder="品类/分组，留空不改" />
+            <input value={bulkTags.phone} onChange={(event) => setBulkTags((current) => ({ ...current, phone: event.target.value }))} placeholder="手机，留空不改" />
+            <input value={bulkTags.employee} onChange={(event) => setBulkTags((current) => ({ ...current, employee: event.target.value }))} placeholder="员工，留空不改" />
+            <input value={bulkTags.note} onChange={(event) => setBulkTags((current) => ({ ...current, note: event.target.value }))} placeholder="备注，留空不改" />
+            <button className="ghost-light-button" disabled={busy || !authenticated || !accountsMeta.total || !hasBulkUpdates} onClick={submitBulkUpdate}>批量保存</button>
           </div>
           <div className="table-wrap">
             <table>
               <thead><tr><th>账号</th><th>标签</th><th>粉丝</th><th>今日</th><th>新发播放</th><th>今日增播</th><th>总播放</th><th>24h</th><th></th></tr></thead>
               <tbody>
                 {accounts.map((account) => (
-                  <tr key={account.id}>
+                  <tr className={account.is_active ? "" : "inactive-row"} key={account.id}>
                     <td><button className="link-button" onClick={() => onOpenAccount(account.id)}>@{account.username}</button><span>{account.nickname || account.employee || "未标注"}</span></td>
-                    <td><span>{account.group || "未分组"}</span><small>{account.phone || "-"} · {account.employee || "未分配"}</small></td>
+                    <td>
+                      <EditableAccountTags account={account} busy={busy || !authenticated} onSave={(payload) => onUpdateAccount(account.id, payload)} />
+                    </td>
                     <td>{compactNumber(account.followers)}</td>
                     <td>{account.posted_today ? <span className="post-badge post-yes">+{account.today_post_count || 0}</span> : <span className="post-badge post-no">未发</span>}</td>
                     <td>{account.today_new_plays ? compactNumber(account.today_new_plays) : "-"}</td>
                     <td>{signedNumber(account.growth?.today_plays_increase)}</td>
                     <td>{compactNumber(account.total_plays)}</td>
                     <td>{signedNumber(account.growth?.plays_increase)}</td>
-                    <td><button className="icon-button" title="同步账号" disabled={busy || !authenticated} onClick={() => onSync(account.id)}><RefreshCcw aria-hidden="true" /></button></td>
+                    <td>
+                      <div className="account-actions">
+                        <button className="icon-button" title="同步账号" disabled={busy || !authenticated} onClick={() => onSync(account.id)}><RefreshCcw aria-hidden="true" /></button>
+                        <button className="text-button" disabled={busy || !authenticated} onClick={() => onToggleActive(account)}>{account.is_active ? "停用" : "启用"}</button>
+                        <button className="text-button danger-text" disabled={busy || !authenticated} onClick={() => onDeleteAccount(account)}>删除</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -827,6 +935,62 @@ function Dashboard({
         </section>
       </section>
     </>
+  );
+}
+
+function EditableAccountTags({
+  account,
+  busy,
+  onSave
+}: {
+  account: Account;
+  busy: boolean;
+  onSave: (payload: AccountUpdate) => void;
+}) {
+  const [draft, setDraft] = useState({
+    group_name: account.group || account.group_name || "",
+    phone: account.phone || "",
+    employee: account.employee || "",
+    note: account.note || ""
+  });
+
+  useEffect(() => {
+    setDraft({
+      group_name: account.group || account.group_name || "",
+      phone: account.phone || "",
+      employee: account.employee || "",
+      note: account.note || ""
+    });
+  }, [account.id, account.group, account.group_name, account.phone, account.employee, account.note]);
+
+  const saveIfChanged = () => {
+    const next = {
+      group_name: draft.group_name.trim(),
+      phone: draft.phone.trim(),
+      employee: draft.employee.trim(),
+      note: draft.note.trim()
+    };
+    const current = {
+      group_name: account.group || account.group_name || "",
+      phone: account.phone || "",
+      employee: account.employee || "",
+      note: account.note || ""
+    };
+    const payload: AccountUpdate = {};
+    if (next.group_name !== current.group_name) payload.group_name = next.group_name;
+    if (next.phone !== current.phone) payload.phone = next.phone;
+    if (next.employee !== current.employee) payload.employee = next.employee;
+    if (next.note !== current.note) payload.note = next.note;
+    if (Object.keys(payload).length) onSave(payload);
+  };
+
+  return (
+    <div className="tag-edit-grid">
+      <input disabled={busy} value={draft.group_name} onBlur={saveIfChanged} onChange={(event) => setDraft((current) => ({ ...current, group_name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="未分组" />
+      <input disabled={busy} value={draft.phone} onBlur={saveIfChanged} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="手机" />
+      <input disabled={busy} value={draft.employee} onBlur={saveIfChanged} onChange={(event) => setDraft((current) => ({ ...current, employee: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="未分配" />
+      <input disabled={busy} value={draft.note} onBlur={saveIfChanged} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder="备注" />
+    </div>
   );
 }
 

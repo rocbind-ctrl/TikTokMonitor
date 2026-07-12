@@ -214,6 +214,10 @@ textarea {
   background: transparent;
 }
 
+.danger-text {
+  color: #b84f20;
+}
+
 button:disabled {
   cursor: default;
   opacity: 0.55;
@@ -402,9 +406,27 @@ h2 {
 
 .account-filter-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(5, minmax(120px, 150px)) auto;
+  grid-template-columns: minmax(180px, 1fr) repeat(6, minmax(120px, 150px)) auto;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.bulk-tag-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(4, minmax(120px, 150px)) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid #edf1f2;
+  border-radius: 10px;
+  background: #f8fbfb;
+}
+
+.bulk-tag-panel span {
+  color: #405058;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .content-grid {
@@ -537,6 +559,31 @@ td small {
   display: block;
   color: #6b7c84;
   font-size: 12px;
+}
+
+.tag-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(88px, 1fr));
+  gap: 6px;
+  min-width: 240px;
+}
+
+.tag-edit-grid input {
+  min-height: 30px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.account-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inactive-row {
+  opacity: 0.68;
+  background: #f7f1ee;
 }
 
 .post-badge {
@@ -772,6 +819,7 @@ td small {
   .content-grid,
   .entry-row,
   .account-filter-grid,
+  .bulk-tag-panel,
   .detail-metrics,
   .form-grid,
   .settings-grid {

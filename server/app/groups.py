@@ -44,7 +44,12 @@ def _apply_filters(
     phone: str = "",
     employee: str = "",
     search: str = "",
+    status: str = "active",
 ):
+    if status == "active":
+        q = q.filter(Account.is_active == 1)
+    elif status == "inactive":
+        q = q.filter(Account.is_active == 0)
     if group:
         q = q.filter(Account.group_name == group)
     if phone:
@@ -109,7 +114,12 @@ def _account_matches_filters(
     phone: str = "",
     employee: str = "",
     search: str = "",
+    status: str = "active",
 ) -> bool:
+    if status == "active" and not account.is_active:
+        return False
+    if status == "inactive" and account.is_active:
+        return False
     if group and account.group_name != group:
         return False
     if phone and account.phone != phone:
@@ -138,9 +148,15 @@ def _account_matches_filters(
     return True
 
 
-def load_active_accounts_metrics(db: Session) -> dict:
+def load_active_accounts_metrics(db: Session, status: str = "active") -> dict:
     """一次加载首页所需的账号、视频与增播统计，避免重复查库。"""
-    all_accounts = db.query(Account).filter(Account.is_active == 1).all()
+    status = status if status in ("active", "inactive", "all") else "active"
+    query = db.query(Account)
+    if status == "active":
+        query = query.filter(Account.is_active == 1)
+    elif status == "inactive":
+        query = query.filter(Account.is_active == 0)
+    all_accounts = query.all()
     account_ids = [a.id for a in all_accounts]
     play_map = _play_totals_map(db, account_ids)
     today_map = _today_videos_map(db, account_ids)
@@ -236,17 +252,19 @@ def query_accounts(
     employee: str = "",
     search: str = "",
     post_today: str = "",
+    status: str = "active",
     sort: str = "plays_desc",
     page: int = 1,
     per_page: int = 50,
     metrics: dict | None = None,
 ) -> tuple[list[dict], int, dict, int]:
-    bundle = metrics or load_active_accounts_metrics(db)
+    status = status if status in ("active", "inactive", "all") else "active"
+    bundle = metrics or load_active_accounts_metrics(db, status=status)
     all_accounts = [
         account
         for account in bundle["accounts"]
         if _account_matches_filters(
-            account, group=group, phone=phone, employee=employee, search=search
+            account, group=group, phone=phone, employee=employee, search=search, status=status
         )
     ]
 

@@ -216,6 +216,54 @@ class ApiV2TestCase(unittest.TestCase):
         searched = self.client.get("/api/v2/accounts?q=priority")
         self.assertEqual(searched.json()["meta"]["total"], 1)
 
+    def test_v2_account_status_and_bulk_tag_management(self):
+        self.login()
+        first_id = self.create_account("status-alpha")
+        second_id = self.create_account("status-beta")
+
+        updated = self.client.patch(
+            f"/api/v2/accounts/{first_id}",
+            json={"group_name": "Beauty", "phone": "Phone A", "employee": "Alice", "note": "priority"},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["data"]["group"], "Beauty")
+        self.assertEqual(updated.json()["data"]["note"], "priority")
+
+        disabled = self.client.patch(f"/api/v2/accounts/{second_id}", json={"is_active": False})
+        self.assertEqual(disabled.status_code, 200)
+        self.assertFalse(disabled.json()["data"]["is_active"])
+
+        active_only = self.client.get("/api/v2/accounts")
+        self.assertEqual(active_only.status_code, 200)
+        self.assertEqual(active_only.json()["meta"]["total"], 1)
+        self.assertEqual(active_only.json()["data"][0]["id"], first_id)
+        self.assertEqual(active_only.json()["meta"]["filters"]["status"], "active")
+
+        inactive_only = self.client.get("/api/v2/accounts?status=inactive")
+        self.assertEqual(inactive_only.status_code, 200)
+        self.assertEqual(inactive_only.json()["meta"]["total"], 1)
+        self.assertEqual(inactive_only.json()["data"][0]["id"], second_id)
+
+        all_accounts = self.client.get("/api/v2/accounts?status=all")
+        self.assertEqual(all_accounts.status_code, 200)
+        self.assertEqual(all_accounts.json()["meta"]["total"], 2)
+
+        bulk = self.client.post(
+            "/api/v2/accounts/bulk-tag",
+            json={
+                "filters": {"status": "inactive", "group": "Team A"},
+                "updates": {"phone": "Phone B", "employee": "Bob"},
+            },
+        )
+        self.assertEqual(bulk.status_code, 200)
+        self.assertEqual(bulk.json()["data"]["updated"], 1)
+        self.assertEqual(bulk.json()["data"]["account_ids"], [second_id])
+
+        second = self.client.get(f"/api/v2/accounts/{second_id}")
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["data"]["phone"], "Phone B")
+        self.assertEqual(second.json()["data"]["employee"], "Bob")
+
     def test_v2_accepts_bearer_session_without_cookie(self):
         token = self.login_token()
         self.client.cookies.clear()

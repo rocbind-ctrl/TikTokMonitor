@@ -245,7 +245,17 @@ export interface AccountFilters {
   phone?: string;
   employee?: string;
   post_today?: string;
+  status?: string;
   sort?: string;
+}
+
+export interface AccountUpdate {
+  group_name?: string;
+  group?: string;
+  phone?: string;
+  employee?: string;
+  note?: string;
+  is_active?: boolean;
 }
 
 export interface SessionState {
@@ -378,6 +388,18 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     },
     account: (accountId: number, videoPage = 1, logPage = 1) =>
       request<AccountDetail>(`/api/v2/accounts/${accountId}?video_page=${videoPage}&log_page=${logPage}`, { method: "GET" }),
+    updateAccount: (accountId: number, payload: AccountUpdate) =>
+      request<Account>(`/api/v2/accounts/${accountId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      }),
+    deleteAccount: (accountId: number) =>
+      request<{ id: number; message: string }>(`/api/v2/accounts/${accountId}`, { method: "DELETE" }),
+    bulkUpdateAccounts: (filters: AccountFilters, updates: AccountUpdate) =>
+      request<{ updated: number; account_ids: number[] }>("/api/v2/accounts/bulk-tag", {
+        method: "POST",
+        body: JSON.stringify({ filters, updates })
+      }),
     video: (videoId: number, historyPage = 1) =>
       request<Video>(`/api/v2/videos/${videoId}?history_page=${historyPage}`, { method: "GET" }),
     alerts: (page = 1, perPage = 30, unreadOnly = false, level = "") =>
