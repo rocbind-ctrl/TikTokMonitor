@@ -739,7 +739,17 @@ async def api_v2_create_account(request: Request, db: Session = Depends(get_db))
         return _v2_error("invalid_username", "A TikTok username or profile URL is required")
     existing = db.query(Account).filter(func.lower(Account.username) == username.lower()).first()
     if existing:
-        return _v2_error("account_exists", f"@{username} is already monitored", status_code=409)
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "data": _account_payload(existing),
+                "error": {
+                    "code": "account_exists",
+                    "message": f"@{username} is already monitored",
+                },
+            },
+        )
 
     account = Account(
         username=username,

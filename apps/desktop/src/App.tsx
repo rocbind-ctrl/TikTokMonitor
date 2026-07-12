@@ -206,7 +206,11 @@ export default function App() {
       setMessage(result.message);
       setNewUsername("");
       setNewGroup("");
-      await loadData();
+      if (result.status === "exists") {
+        await openAccount(result.account.id);
+      } else {
+        await loadData();
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "添加失败");
     } finally {

@@ -266,6 +266,20 @@ interface ApiEnvelope<T> {
   meta?: PageMeta;
 }
 
+export class ApiError<T = unknown> extends Error {
+  code?: string;
+  status?: number;
+  data?: T;
+
+  constructor(message: string, options: { code?: string; status?: number; data?: T } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.code = options.code;
+    this.status = options.status;
+    this.data = options.data;
+  }
+}
+
 export function createApiClient(baseUrl: string, sessionToken = "") {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   const isBrowserDev =
@@ -301,21 +315,28 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
 
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`;
+      let code: string | undefined;
+      let errorData: unknown;
       if (body && typeof body === "object") {
-        const errorBody = body as { message?: string; detail?: string; error?: string | { message?: string } };
+        const errorBody = body as { message?: string; detail?: string; error?: string | { code?: string; message?: string }; data?: unknown };
+        code = typeof errorBody.error === "object" ? errorBody.error?.code : undefined;
+        errorData = errorBody.data;
         message =
           errorBody.message ||
           errorBody.detail ||
           (typeof errorBody.error === "string" ? errorBody.error : errorBody.error?.message) ||
           message;
       }
-      throw new Error(message);
+      throw new ApiError(message, { code, status: response.status, data: errorData });
     }
 
     if (path.startsWith("/api/v2/")) {
       const envelope = body as ApiEnvelope<T>;
       if (!envelope?.ok) {
-        throw new Error(envelope?.error?.message || "请求失败");
+        throw new ApiError(envelope?.error?.message || "请求失败", {
+          code: envelope?.error?.code,
+          data: envelope?.data
+        });
       }
       return { data: envelope.data, meta: envelope.meta };
     }
@@ -382,9 +403,27 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
         body: JSON.stringify({ ids })
       }),
     addAccount: (username: string, groupName = "") =>
-      request<Account>("/api/v2/accounts", { method: "POST", body: JSON.stringify({ username, group_name: groupName }) }).then(
-        (account) => ({ status: "success", message: `@${account.username} 已添加`, account })
-      ),
+      request<Account>("/api/v2/accounts", { method: "POST", body: JSON.stringify({ username, group_name: groupName }) })
+        .then((account) => ({ status: "success", message: `@${account.username} 已添加`, account }))
+        .catch(async (error) => {
+          if (error instanceof ApiError && error.code === "account_exists") {
+            const existing = error.data as Account | undefined;
+            if (existing?.id) {
+              return { status: "exists", message: `@${existing.username} 已存在，已打开账号详情`, account: existing };
+            }
+            const match = error.message.match(/^@?([^@\s]+)\s+is already monitored/i);
+            const duplicateUsername = match?.[1] || username;
+            const accounts = await requestPage<Account>(
+              `/api/v2/accounts?page=1&per_page=200&q=${encodeURIComponent(duplicateUsername)}`,
+              { method: "GET" }
+            );
+            const found = accounts.items.find((account) => account.username.toLowerCase() === duplicateUsername.toLowerCase());
+            if (found) {
+              return { status: "exists", message: `@${found.username} 已存在，已打开账号详情`, account: found };
+            }
+          }
+          throw error;
+        }),
     importAccounts: (payload: {
       raw: string;
       group_name?: string;

@@ -121,6 +121,11 @@ class ApiV2TestCase(unittest.TestCase):
         self.create_account("second-account")
         self.create_account("third-account")
 
+        duplicate = self.client.post("/api/v2/accounts", json={"username": "first-account"})
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(duplicate.json()["error"]["code"], "account_exists")
+        self.assertEqual(duplicate.json()["data"]["id"], first_id)
+
         accounts = self.client.get("/api/v2/accounts?page=2&per_page=2")
         self.assertEqual(accounts.status_code, 200)
         body = accounts.json()
