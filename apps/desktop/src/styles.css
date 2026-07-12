@@ -419,7 +419,7 @@ h2 {
 
 .bulk-tag-panel {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(4, minmax(120px, 150px)) auto;
+  grid-template-columns: minmax(180px, 1fr) repeat(4, minmax(120px, 150px)) repeat(3, auto);
   align-items: center;
   gap: 8px;
   margin: 0 0 14px;
@@ -433,6 +433,37 @@ h2 {
   color: #405058;
   font-size: 13px;
   font-weight: 700;
+}
+
+.saved-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 14px;
+  color: #6b7c84;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.saved-filter-chip {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #d8e0e3;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.saved-filter-chip button {
+  min-height: 30px;
+  border: 0;
+  padding: 0 10px;
+  color: #0c6e7e;
+  background: transparent;
+}
+
+.saved-filter-chip button + button {
+  border-left: 1px solid #edf1f2;
+  color: #b84f20;
 }
 
 .content-grid {

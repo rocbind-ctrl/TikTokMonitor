@@ -457,6 +457,14 @@ def _v2_error(code: str, message: str, *, status_code: int = 400):
     )
 
 
+def _csv_response(content: str, filename: str) -> Response:
+    return Response(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def request_validation_error(request: Request, exc: RequestValidationError):
     if request.url.path.startswith("/api/v2/"):
@@ -747,6 +755,62 @@ def api_v2_insights(days: int = 7, limit: int = 10, db: Session = Depends(get_db
             "alerts": [_alert_payload(alert) for alert in alerts],
         }
     )
+
+
+@app.get("/api/v2/export/accounts.csv")
+def api_v2_export_accounts(
+    q: str = "",
+    group: str = "",
+    phone: str = "",
+    employee: str = "",
+    post_today: str = "",
+    status: str = "active",
+    sort: str = "plays_desc",
+    db: Session = Depends(get_db),
+):
+    search = q.strip()
+    group = group.strip()
+    phone = phone.strip()
+    employee = employee.strip()
+    post_today = post_today.strip()
+    status = status.strip().lower()
+    if post_today not in ("", "yes", "no"):
+        post_today = ""
+    if status not in ("active", "inactive", "all"):
+        status = "active"
+    if sort not in ACCOUNT_SORT_OPTIONS:
+        sort = "plays_desc"
+    metrics = load_active_accounts_metrics(db, status=status)
+    rows, total, _, _ = query_accounts(
+        db,
+        group=group,
+        phone=phone,
+        employee=employee,
+        search=search,
+        post_today=post_today,
+        status=status,
+        sort=sort,
+        page=1,
+        per_page=max(1, len(metrics["accounts"])),
+        metrics=metrics,
+    )
+    account_ids = [row["account"].id for row in rows]
+    accounts = []
+    if account_ids:
+        account_map = {
+            account.id: account
+            for account in db.query(Account).options(joinedload(Account.videos)).filter(Account.id.in_(account_ids)).all()
+        }
+        accounts = [account_map[account_id] for account_id in account_ids if account_id in account_map]
+    content = export_accounts_csv(db, accounts=accounts)
+    return _csv_response(content, f"accounts_{total}.csv")
+
+
+@app.get("/api/v2/export/videos.csv")
+def api_v2_export_videos(account_id: int | None = None, db: Session = Depends(get_db)):
+    content = export_videos_csv(db, account_id=account_id)
+    suffix = f"account_{account_id}" if account_id else "all"
+    return _csv_response(content, f"videos_{suffix}.csv")
 
 
 @app.get("/api/v2/accounts")

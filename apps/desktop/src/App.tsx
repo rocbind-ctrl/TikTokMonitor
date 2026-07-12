@@ -38,7 +38,9 @@ import {
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
 type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "import" | "settings";
+type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
+const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
 
 function compactNumber(value: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { notation: "compact" }).format(value || 0);
@@ -91,6 +93,14 @@ export default function App() {
   const [alertLevel, setAlertLevel] = useState("");
   const [selectedAlertIds, setSelectedAlertIds] = useState<number[]>([]);
   const [logFilters, setLogFilters] = useState<LogFilters>({});
+  const [savedAccountFilters, setSavedAccountFilters] = useState<SavedAccountFilter[]>(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_ACCOUNT_FILTERS_KEY);
+      return raw ? JSON.parse(raw) as SavedAccountFilter[] : [];
+    } catch {
+      return [];
+    }
+  });
   const [newUsername, setNewUsername] = useState("");
   const [newGroup, setNewGroup] = useState("");
   const [accountFilters, setAccountFilters] = useState<AccountFilters>({ sort: "plays_desc" });
@@ -209,6 +219,71 @@ export default function App() {
   function updateLogFilter(key: keyof LogFilters, value: string) {
     setLogFilters((current) => ({ ...current, [key]: value }));
     setLogPage(1);
+  }
+
+  function persistSavedAccountFilters(next: SavedAccountFilter[]) {
+    setSavedAccountFilters(next);
+    localStorage.setItem(SAVED_ACCOUNT_FILTERS_KEY, JSON.stringify(next));
+  }
+
+  function saveCurrentAccountFilter() {
+    const name = window.prompt("给当前账号筛选取个名字", `筛选 ${savedAccountFilters.length + 1}`);
+    if (!name?.trim()) return;
+    const nextFilter: SavedAccountFilter = {
+      id: `${Date.now()}`,
+      name: name.trim(),
+      filters: { ...accountFilters }
+    };
+    persistSavedAccountFilters([nextFilter, ...savedAccountFilters].slice(0, 12));
+    setMessage(`已保存筛选：${nextFilter.name}`);
+  }
+
+  function applySavedAccountFilter(saved: SavedAccountFilter) {
+    setAccountFilters({ ...saved.filters });
+    setAccountPage(1);
+    setMessage(`已应用筛选：${saved.name}`);
+  }
+
+  function deleteSavedAccountFilter(filterId: string) {
+    persistSavedAccountFilters(savedAccountFilters.filter((item) => item.id !== filterId));
+  }
+
+  function downloadTextFile(filename: string, content: string, type = "text/csv;charset=utf-8") {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportAccountsCsv() {
+    setBusy(true);
+    try {
+      const csv = await api.exportAccountsCsv(accountFilters);
+      downloadTextFile(`accounts_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+      setMessage("账号 CSV 已导出");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "导出账号失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportVideosCsv() {
+    setBusy(true);
+    try {
+      const csv = await api.exportVideosCsv();
+      downloadTextFile(`videos_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+      setMessage("视频 CSV 已导出");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "导出视频失败");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function addAccount() {
@@ -587,12 +662,18 @@ export default function App() {
             newUsername={newUsername}
             newGroup={newGroup}
             accountFilters={accountFilters}
+            savedAccountFilters={savedAccountFilters}
             unreadOnly={unreadOnly}
             alertLevel={alertLevel}
             selectedAlertIds={selectedAlertIds}
             onUsernameChange={setNewUsername}
             onGroupChange={setNewGroup}
             onAccountFilterChange={updateAccountFilter}
+            onSaveAccountFilter={saveCurrentAccountFilter}
+            onApplyAccountFilter={applySavedAccountFilter}
+            onDeleteAccountFilter={deleteSavedAccountFilter}
+            onExportAccounts={() => void exportAccountsCsv()}
+            onExportVideos={() => void exportVideosCsv()}
             onUnreadOnlyChange={(value) => {
               setUnreadOnly(value);
               setAlertPage(1);
@@ -729,12 +810,18 @@ function Dashboard({
   newUsername,
   newGroup,
   accountFilters,
+  savedAccountFilters,
   unreadOnly,
   alertLevel,
   selectedAlertIds,
   onUsernameChange,
   onGroupChange,
   onAccountFilterChange,
+  onSaveAccountFilter,
+  onApplyAccountFilter,
+  onDeleteAccountFilter,
+  onExportAccounts,
+  onExportVideos,
   onUnreadOnlyChange,
   onAlertLevelChange,
   onToggleAlert,
@@ -769,12 +856,18 @@ function Dashboard({
   newUsername: string;
   newGroup: string;
   accountFilters: AccountFilters;
+  savedAccountFilters: SavedAccountFilter[];
   unreadOnly: boolean;
   alertLevel: string;
   selectedAlertIds: number[];
   onUsernameChange: (value: string) => void;
   onGroupChange: (value: string) => void;
   onAccountFilterChange: (key: keyof AccountFilters, value: string) => void;
+  onSaveAccountFilter: () => void;
+  onApplyAccountFilter: (saved: SavedAccountFilter) => void;
+  onDeleteAccountFilter: (filterId: string) => void;
+  onExportAccounts: () => void;
+  onExportVideos: () => void;
   onUnreadOnlyChange: (value: boolean) => void;
   onAlertLevelChange: (value: string) => void;
   onToggleAlert: (alertId: number, selected: boolean) => void;
@@ -938,7 +1031,19 @@ function Dashboard({
               {Object.entries(sortOptions).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
             </select>
             <button className="ghost-light-button" onClick={clearAccountFilters}>清除筛选</button>
+            <button className="ghost-light-button" disabled={!authenticated} onClick={onSaveAccountFilter}>保存筛选</button>
           </div>
+          {savedAccountFilters.length ? (
+            <div className="saved-filter-row">
+              <span>已保存筛选</span>
+              {savedAccountFilters.map((saved) => (
+                <span className="saved-filter-chip" key={saved.id}>
+                  <button onClick={() => onApplyAccountFilter(saved)}>{saved.name}</button>
+                  <button aria-label={`删除筛选 ${saved.name}`} onClick={() => onDeleteAccountFilter(saved.id)}>×</button>
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="bulk-tag-panel">
             <span>批量修改当前筛选结果（{accountsMeta.total} 个）</span>
             <input value={bulkTags.group_name} onChange={(event) => setBulkTags((current) => ({ ...current, group_name: event.target.value }))} placeholder="品类/分组，留空不改" />
@@ -946,6 +1051,8 @@ function Dashboard({
             <input value={bulkTags.employee} onChange={(event) => setBulkTags((current) => ({ ...current, employee: event.target.value }))} placeholder="员工，留空不改" />
             <input value={bulkTags.note} onChange={(event) => setBulkTags((current) => ({ ...current, note: event.target.value }))} placeholder="备注，留空不改" />
             <button className="ghost-light-button" disabled={busy || !authenticated || !accountsMeta.total || !hasBulkUpdates} onClick={submitBulkUpdate}>批量保存</button>
+            <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onExportAccounts}>导出账号 CSV</button>
+            <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onExportVideos}>导出视频 CSV</button>
           </div>
           <div className="table-wrap">
             <table>

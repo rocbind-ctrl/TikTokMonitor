@@ -435,6 +435,28 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     return (await requestEnvelope<T>(path, init)).data;
   }
 
+  async function requestText(path: string, init: RequestInit = {}): Promise<string> {
+    const url = `${normalizedBase}${path}`;
+    let response: Response;
+    try {
+      response = await requestFetch(url, {
+        credentials: "include",
+        headers: {
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          ...(init.headers || {})
+        },
+        ...init
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error || "未知错误");
+      throw new Error(`连接失败：${url}。底层错误：${detail}`);
+    }
+    if (!response.ok) {
+      throw new ApiError(`${response.status} ${response.statusText}`, { status: response.status });
+    }
+    return response.text();
+  }
+
   async function requestPage<T>(path: string, init: RequestInit = {}): Promise<Paginated<T>> {
     const response = await requestEnvelope<T[]>(path, init);
     if (!response.meta) {
@@ -456,6 +478,17 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     dashboard: () => request<DashboardData>("/api/v2/dashboard", { method: "GET" }),
     insights: (days = 7, limit = 10) =>
       request<InsightsData>(`/api/v2/insights?days=${days}&limit=${limit}`, { method: "GET" }),
+    exportAccountsCsv: (filters: AccountFilters = {}) => {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.set(key, value);
+      });
+      return requestText(`/api/v2/export/accounts.csv?${params.toString()}`, { method: "GET" });
+    },
+    exportVideosCsv: (accountId?: number) => {
+      const suffix = accountId ? `?account_id=${accountId}` : "";
+      return requestText(`/api/v2/export/videos.csv${suffix}`, { method: "GET" });
+    },
     accounts: (page = 1, perPage = 50, filters: AccountFilters = {}) => {
       const params = new URLSearchParams({
         page: String(page),

@@ -216,6 +216,16 @@ class ApiV2TestCase(unittest.TestCase):
         searched = self.client.get("/api/v2/accounts?q=priority")
         self.assertEqual(searched.json()["meta"]["total"], 1)
 
+        exported_accounts = self.client.get("/api/v2/export/accounts.csv?group=Beauty&employee=Alice&post_today=yes")
+        self.assertEqual(exported_accounts.status_code, 200)
+        self.assertIn("text/csv", exported_accounts.headers["content-type"])
+        self.assertIn("alpha-account", exported_accounts.text)
+        self.assertNotIn("beta-account", exported_accounts.text)
+
+        exported_videos = self.client.get(f"/api/v2/export/videos.csv?account_id={first_id}")
+        self.assertEqual(exported_videos.status_code, 200)
+        self.assertIn("alpha-video", exported_videos.text)
+
     def test_v2_account_status_and_bulk_tag_management(self):
         self.login()
         first_id = self.create_account("status-alpha")

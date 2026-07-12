@@ -8,7 +8,7 @@ from app.analytics import account_total_plays, engagement_rate, format_tk_time
 from app.database import Account, Video
 
 
-def export_accounts_csv(db: Session) -> str:
+def export_accounts_csv(db: Session, accounts: list[Account] | None = None) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -29,7 +29,7 @@ def export_accounts_csv(db: Session) -> str:
             "last_sync",
         ]
     )
-    accounts = db.query(Account).options(joinedload(Account.videos)).order_by(Account.id).all()
+    accounts = accounts if accounts is not None else db.query(Account).options(joinedload(Account.videos)).order_by(Account.id).all()
     for a in accounts:
         writer.writerow(
             [
