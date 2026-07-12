@@ -41,12 +41,19 @@ export interface Account {
   total_plays: number;
   engagement_rate: number;
   last_sync: string | null;
+  growth?: AccountGrowth;
+  today_post_count?: number;
+  today_new_plays?: number;
+  posted_today?: boolean;
+  today_latest_video?: Video | null;
+  today_videos?: Video[];
 }
 
 export interface AccountGrowth {
   follower_delta: number;
   likes_delta: number;
   plays_delta: number;
+  plays_increase?: number;
   today_plays_increase?: number;
   hours: number;
   baseline_hours?: number;
@@ -120,6 +127,10 @@ export interface PageMeta {
   per_page: number;
   total: number;
   total_pages: number;
+  filters?: AccountFilters;
+  filter_totals?: DashboardTotals;
+  sort_options?: Record<string, string>;
+  options?: DashboardOptions;
 }
 
 export interface Paginated<T> {
@@ -144,6 +155,97 @@ export interface ProviderHealth {
   avg_latency_ms?: number;
   last_success_at?: string | null;
   last_failure_at?: string | null;
+}
+
+export interface DashboardToday {
+  total_videos: number;
+  total_plays: number;
+  posted_accounts: number;
+  not_posted_accounts: number;
+  date_label: string;
+  tz_label: string;
+  plays_increase?: number;
+}
+
+export interface DashboardTotals {
+  account_count: number;
+  total_plays: number;
+  plays_24h: number;
+  plays_today: number;
+  today_new_plays: number;
+  today_videos: number;
+  posted_accounts: number;
+  not_posted_accounts: number;
+}
+
+export interface EmployeeReportRow {
+  employee: string;
+  account_count: number;
+  today_count: number;
+  posted_today: number;
+  daily_counts: number[];
+  daily_plays: number[];
+  today_new_plays: number;
+  today_plays_gain: number;
+  total_period: number;
+  total_plays_period: number;
+}
+
+export interface EmployeeReport {
+  date_labels: string[];
+  rows: EmployeeReportRow[];
+  days: number;
+}
+
+export interface GroupStat {
+  group_name: string;
+  account_count: number;
+  total_plays: number;
+  plays_24h: number;
+  top_accounts: {
+    id: number;
+    username: string;
+    nickname?: string;
+    total_plays: number;
+    plays_24h: number;
+  }[];
+}
+
+export interface DashboardOptions {
+  groups: string[];
+  phones: string[];
+  employees: string[];
+  sort_options: Record<string, string>;
+}
+
+export interface SyncProgress {
+  running?: boolean;
+  total?: number;
+  completed?: number;
+  current_username?: string;
+  queue_size?: number;
+}
+
+export interface DashboardData {
+  today: DashboardToday;
+  filter_totals: DashboardTotals;
+  employee_report: EmployeeReport;
+  group_stats: GroupStat[];
+  options: DashboardOptions;
+  sync: {
+    progress: SyncProgress;
+    queue_size: number;
+    syncing_ids: number[];
+  };
+}
+
+export interface AccountFilters {
+  q?: string;
+  group?: string;
+  phone?: string;
+  employee?: string;
+  post_today?: string;
+  sort?: string;
 }
 
 export interface SessionState {
@@ -242,8 +344,17 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     logout: () => request<{ authenticated: boolean }>("/api/v2/auth/logout", { method: "POST" }),
     health: () => request<Health>("/api/v2/health", { method: "GET" }),
     stats: () => request<Stats>("/api/v2/stats", { method: "GET" }),
-    accounts: (page = 1, perPage = 50) =>
-      requestPage<Account>(`/api/v2/accounts?page=${page}&per_page=${perPage}`, { method: "GET" }),
+    dashboard: () => request<DashboardData>("/api/v2/dashboard", { method: "GET" }),
+    accounts: (page = 1, perPage = 50, filters: AccountFilters = {}) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(perPage)
+      });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.set(key, value);
+      });
+      return requestPage<Account>(`/api/v2/accounts?${params.toString()}`, { method: "GET" });
+    },
     account: (accountId: number, videoPage = 1, logPage = 1) =>
       request<AccountDetail>(`/api/v2/accounts/${accountId}?video_page=${videoPage}&log_page=${logPage}`, { method: "GET" }),
     video: (videoId: number, historyPage = 1) =>

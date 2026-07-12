@@ -307,6 +307,10 @@ h2 {
   margin-bottom: 18px;
 }
 
+.today-grid {
+  margin-top: -4px;
+}
+
 .metric-card,
 .panel {
   border: 1px solid #dfe7e9;
@@ -346,6 +350,61 @@ h2 {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(140px, 220px) auto;
   margin-bottom: 18px;
+}
+
+.sync-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  color: #17343b;
+  background: #e9f6f8;
+}
+
+.chip-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.chip-row button {
+  display: grid;
+  gap: 2px;
+  min-width: max-content;
+  border: 1px solid #d8e0e3;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #405058;
+  background: #ffffff;
+  text-align: left;
+}
+
+.chip-row button.active {
+  color: #ffffff;
+  border-color: #0c6e7e;
+  background: #0c6e7e;
+}
+
+.chip-row span {
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.employee-report {
+  margin-bottom: 18px;
+}
+
+.compact-table {
+  min-width: 680px;
+}
+
+.account-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(5, minmax(120px, 150px)) auto;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .content-grid {
@@ -452,7 +511,7 @@ h2 {
 
 table {
   width: 100%;
-  min-width: 760px;
+  min-width: 920px;
   border-collapse: collapse;
 }
 
@@ -472,6 +531,34 @@ th {
 td strong,
 td span {
   display: block;
+}
+
+td small {
+  display: block;
+  color: #6b7c84;
+  font-size: 12px;
+}
+
+.post-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.post-yes {
+  color: #0b5d41;
+  background: #dff6ec;
+}
+
+.post-no {
+  color: #8a4b10;
+  background: #fff0db;
 }
 
 .link-button {
@@ -684,6 +771,7 @@ td span {
   .metric-grid,
   .content-grid,
   .entry-row,
+  .account-filter-grid,
   .detail-metrics,
   .form-grid,
   .settings-grid {

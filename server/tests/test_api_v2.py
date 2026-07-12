@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from fastapi.testclient import TestClient
@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import auth, routes
-from app.database import Account, Alert, Base, SyncLog, Video, VideoStatsHistory, get_db
+from app.database import Account, AccountStatsHistory, Alert, Base, SyncLog, Video, VideoStatsHistory, get_db
 
 
 class ApiV2TestCase(unittest.TestCase):
@@ -65,7 +65,7 @@ class ApiV2TestCase(unittest.TestCase):
     def setUp(self):
         db = self.Session()
         try:
-            for model in (VideoStatsHistory, Alert, SyncLog, Video, Account):
+            for model in (VideoStatsHistory, AccountStatsHistory, Alert, SyncLog, Video, Account):
                 db.query(model).delete()
             db.commit()
         finally:
@@ -125,7 +125,7 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(accounts.status_code, 200)
         body = accounts.json()
         self.assertTrue(body["ok"])
-        self.assertEqual(body["meta"], {"page": 2, "per_page": 2, "total": 3, "total_pages": 2})
+        self.assertEqual({key: body["meta"][key] for key in ("page", "per_page", "total", "total_pages")}, {"page": 2, "per_page": 2, "total": 3, "total_pages": 2})
         self.assertEqual(len(body["data"]), 1)
 
         updated = self.client.patch(f"/api/v2/accounts/{first_id}", json={"employee": "Alice"})
@@ -144,6 +144,72 @@ class ApiV2TestCase(unittest.TestCase):
         deleted = self.client.delete(f"/api/v2/accounts/{first_id}")
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(deleted.json()["data"]["id"], first_id)
+
+    def test_v2_dashboard_and_account_filters(self):
+        self.login()
+        first_id = self.create_account("alpha-account")
+        second_id = self.create_account("beta-account")
+
+        self.client.patch(
+            f"/api/v2/accounts/{first_id}",
+            json={"group_name": "Beauty", "phone": "Phone A", "employee": "Alice", "note": "priority"},
+        )
+        self.client.patch(
+            f"/api/v2/accounts/{second_id}",
+            json={"group_name": "Kitchen", "phone": "Phone B", "employee": "Bob"},
+        )
+
+        now = datetime.now(timezone.utc)
+        db = self.Session()
+        try:
+            db.add(
+                Video(
+                    account_id=first_id,
+                    video_id="alpha-video",
+                    title="Alpha today",
+                    play_count=1200,
+                    like_count=100,
+                    published_at=now,
+                    last_sync_at=now,
+                )
+            )
+            db.add(
+                Video(
+                    account_id=second_id,
+                    video_id="beta-old",
+                    title="Beta old",
+                    play_count=300,
+                    like_count=20,
+                    published_at=now - timedelta(days=3),
+                    last_sync_at=now,
+                )
+            )
+            db.add(AccountStatsHistory(account_id=first_id, follower_count=100, total_plays=1200, recorded_at=now))
+            db.commit()
+        finally:
+            db.close()
+
+        dashboard = self.client.get("/api/v2/dashboard")
+        self.assertEqual(dashboard.status_code, 200)
+        dashboard_body = dashboard.json()
+        self.assertTrue(dashboard_body["ok"])
+        self.assertIn("employee_report", dashboard_body["data"])
+        self.assertIn("group_stats", dashboard_body["data"])
+        self.assertIn("Beauty", dashboard_body["data"]["options"]["groups"])
+        self.assertGreaterEqual(dashboard_body["data"]["today"]["total_videos"], 1)
+
+        filtered = self.client.get("/api/v2/accounts?group=Beauty&employee=Alice&post_today=yes&sort=today_new_plays_desc")
+        self.assertEqual(filtered.status_code, 200)
+        filtered_body = filtered.json()
+        self.assertEqual(filtered_body["meta"]["total"], 1)
+        self.assertEqual(filtered_body["data"][0]["id"], first_id)
+        self.assertTrue(filtered_body["data"][0]["posted_today"])
+        self.assertEqual(filtered_body["data"][0]["today_post_count"], 1)
+        self.assertEqual(filtered_body["data"][0]["today_new_plays"], 1200)
+        self.assertEqual(filtered_body["meta"]["filters"]["sort"], "today_new_plays_desc")
+
+        searched = self.client.get("/api/v2/accounts?q=priority")
+        self.assertEqual(searched.json()["meta"]["total"], 1)
 
     def test_v2_accepts_bearer_session_without_cookie(self):
         token = self.login_token()

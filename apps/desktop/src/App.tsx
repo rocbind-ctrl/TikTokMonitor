@@ -20,7 +20,9 @@ import {
   Account,
   AccountDetail,
   Alert,
+  AccountFilters,
   createApiClient,
+  DashboardData,
   Health,
   PageMeta,
   ProviderHealth,
@@ -65,6 +67,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [session, setSession] = useState<SessionState | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -85,6 +88,7 @@ export default function App() {
   const [selectedAlertIds, setSelectedAlertIds] = useState<number[]>([]);
   const [newUsername, setNewUsername] = useState("");
   const [newGroup, setNewGroup] = useState("");
+  const [accountFilters, setAccountFilters] = useState<AccountFilters>({ sort: "plays_desc" });
   const [importText, setImportText] = useState("");
   const [importGroup, setImportGroup] = useState("");
   const [importPhone, setImportPhone] = useState("");
@@ -109,6 +113,7 @@ export default function App() {
 
       const nextAuthenticated = nextSession.authenticated || !nextSession.auth_enabled;
       if (!nextAuthenticated) {
+        setDashboard(null);
         setStats(null);
         setAccounts([]);
         setAlerts([]);
@@ -121,13 +126,15 @@ export default function App() {
         return;
       }
 
-      const [nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] = await Promise.all([
+      const [nextDashboard, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] = await Promise.all([
+        client.dashboard(),
         client.stats(),
-        client.accounts(accountPage),
+        client.accounts(accountPage, 50, accountFilters),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
         client.logs(logPage),
         client.providers()
       ]);
+      setDashboard(nextDashboard);
       setStats(nextStats);
       setAccounts(nextAccounts.items);
       setAlerts(nextAlerts.items);
@@ -146,7 +153,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [accountPage, alertLevel, alertPage, api, logPage, unreadOnly]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, logPage, unreadOnly]);
 
   useEffect(() => {
     void loadData();
@@ -184,6 +191,11 @@ export default function App() {
     localStorage.removeItem("tiktokmonitor.sessionToken");
     setSessionToken("");
     setServerUrl(normalized);
+  }
+
+  function updateAccountFilter(key: keyof AccountFilters, value: string) {
+    setAccountFilters((current) => ({ ...current, [key]: value }));
+    setAccountPage(1);
   }
 
   async function addAccount() {
@@ -463,6 +475,7 @@ export default function App() {
             accounts={accounts}
             accountsMeta={accountsMeta}
             accountPage={accountPage}
+            dashboard={dashboard}
             alerts={visibleAlerts}
             alertsMeta={alertsMeta}
             alertPage={alertPage}
@@ -475,11 +488,13 @@ export default function App() {
             authenticated={authenticated}
             newUsername={newUsername}
             newGroup={newGroup}
+            accountFilters={accountFilters}
             unreadOnly={unreadOnly}
             alertLevel={alertLevel}
             selectedAlertIds={selectedAlertIds}
             onUsernameChange={setNewUsername}
             onGroupChange={setNewGroup}
+            onAccountFilterChange={updateAccountFilter}
             onUnreadOnlyChange={(value) => {
               setUnreadOnly(value);
               setAlertPage(1);
@@ -542,6 +557,7 @@ function Dashboard({
   accounts,
   accountsMeta,
   accountPage,
+  dashboard,
   alerts,
   alertsMeta,
   alertPage,
@@ -554,11 +570,13 @@ function Dashboard({
   authenticated,
   newUsername,
   newGroup,
+  accountFilters,
   unreadOnly,
   alertLevel,
   selectedAlertIds,
   onUsernameChange,
   onGroupChange,
+  onAccountFilterChange,
   onUnreadOnlyChange,
   onAlertLevelChange,
   onToggleAlert,
@@ -575,6 +593,7 @@ function Dashboard({
   accounts: Account[];
   accountsMeta: PageMeta;
   accountPage: number;
+  dashboard: DashboardData | null;
   alerts: Alert[];
   alertsMeta: PageMeta;
   alertPage: number;
@@ -587,11 +606,13 @@ function Dashboard({
   authenticated: boolean;
   newUsername: string;
   newGroup: string;
+  accountFilters: AccountFilters;
   unreadOnly: boolean;
   alertLevel: string;
   selectedAlertIds: number[];
   onUsernameChange: (value: string) => void;
   onGroupChange: (value: string) => void;
+  onAccountFilterChange: (key: keyof AccountFilters, value: string) => void;
   onUnreadOnlyChange: (value: boolean) => void;
   onAlertLevelChange: (value: string) => void;
   onToggleAlert: (alertId: number, selected: boolean) => void;
@@ -605,6 +626,14 @@ function Dashboard({
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
 }) {
+  const options = dashboard?.options || accountsMeta.options || { groups: [], phones: [], employees: [], sort_options: accountsMeta.sort_options || {} };
+  const sortOptions = options.sort_options || accountsMeta.sort_options || {};
+  const progress = dashboard?.sync.progress;
+  const syncBusy = Boolean(progress?.running || (dashboard?.sync.queue_size || 0) > 0);
+  const clearAccountFilters = () => {
+    (["q", "group", "phone", "employee", "post_today"] as (keyof AccountFilters)[]).forEach((key) => onAccountFilterChange(key, ""));
+    onAccountFilterChange("sort", "plays_desc");
+  };
   return (
     <>
       <section className="metric-grid">
@@ -612,6 +641,79 @@ function Dashboard({
         <Metric icon={<Activity />} label="视频" value={stats?.total_videos} detail={`${compactNumber(stats?.total_plays)} 播放`} />
         <Metric icon={<AlertTriangle />} label="未读告警" value={stats?.unread_alerts} detail={`最近同步 ${formatDate(stats?.last_sync_at)}`} />
       </section>
+
+      {dashboard ? (
+        <>
+          <section className="metric-grid today-grid">
+            <Metric icon={<VideoIcon />} label="今日新发" value={dashboard.today.total_videos} detail={`${dashboard.today.date_label} · ${dashboard.today.tz_label}`} />
+            <Metric icon={<Activity />} label="今日增播" value={dashboard.today.plays_increase} detail={`新发播放 ${compactNumber(dashboard.today.total_plays)}`} />
+            <Metric icon={<CheckCircle2 />} label="今日已发" value={dashboard.today.posted_accounts} detail={`未发 ${dashboard.today.not_posted_accounts} 个账号`} />
+          </section>
+
+          {syncBusy ? (
+            <section className="panel sync-strip">
+              <strong>{progress?.running ? "同步中" : "同步队列等待中"}</strong>
+              <span>
+                {progress?.running
+                  ? `${progress.completed || 0}/${progress.total || 0}${progress.current_username ? ` · @${progress.current_username}` : ""}`
+                  : `队列 ${dashboard.sync.queue_size} 个`}
+              </span>
+            </section>
+          ) : null}
+
+          {dashboard.group_stats.length ? (
+            <section className="chip-row" aria-label="大品类筛选">
+              <button className={!accountFilters.group ? "active" : ""} onClick={() => onAccountFilterChange("group", "")}>全部品类</button>
+              {dashboard.group_stats.map((group) => (
+                <button
+                  className={accountFilters.group === group.group_name ? "active" : ""}
+                  key={group.group_name}
+                  onClick={() => onAccountFilterChange("group", group.group_name)}
+                >
+                  {group.group_name}<span>{group.account_count}号 · {signedNumber(group.plays_24h)}</span>
+                </button>
+              ))}
+            </section>
+          ) : null}
+
+          {dashboard.employee_report.rows.length ? (
+            <section className="panel employee-report">
+              <div className="panel-head">
+                <h2>员工发文与播放</h2>
+                <span>近 {dashboard.employee_report.days} 天</span>
+              </div>
+              <div className="table-wrap">
+                <table className="compact-table">
+                  <thead>
+                    <tr>
+                      <th>员工</th>
+                      <th>账号</th>
+                      <th>今日已发</th>
+                      <th>今日新发播放</th>
+                      <th>今日增播</th>
+                      <th>周期发文</th>
+                      <th>周期播放</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboard.employee_report.rows.slice(0, 8).map((row) => (
+                      <tr key={row.employee}>
+                        <td><button className="link-button" onClick={() => onAccountFilterChange("employee", row.employee)}>{row.employee}</button></td>
+                        <td>{row.account_count}</td>
+                        <td>{row.posted_today}/{row.account_count}</td>
+                        <td>{compactNumber(row.today_new_plays)}</td>
+                        <td>{signedNumber(row.today_plays_gain)}</td>
+                        <td>{row.total_period}</td>
+                        <td>{compactNumber(row.total_plays_period)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
 
       <section className="entry-row">
         <input value={newUsername} onChange={(event) => onUsernameChange(event.target.value)} placeholder="TikTok 用户名或主页链接" />
@@ -626,20 +728,47 @@ function Dashboard({
         <section className="panel panel-wide">
           <div className="panel-head">
             <h2>账号</h2>
-            <span>{accounts.length} 条</span>
+            <span>{accountsMeta.total} 条</span>
+          </div>
+          <div className="account-filter-grid">
+            <input value={accountFilters.q || ""} onChange={(event) => onAccountFilterChange("q", event.target.value)} placeholder="搜用户名、品类、手机、员工、备注…" />
+            <select className="filter-select" value={accountFilters.group || ""} onChange={(event) => onAccountFilterChange("group", event.target.value)}>
+              <option value="">全部品类</option>
+              {options.groups.map((value) => <option value={value} key={value}>{value}</option>)}
+            </select>
+            <select className="filter-select" value={accountFilters.phone || ""} onChange={(event) => onAccountFilterChange("phone", event.target.value)}>
+              <option value="">全部手机</option>
+              {options.phones.map((value) => <option value={value} key={value}>{value}</option>)}
+            </select>
+            <select className="filter-select" value={accountFilters.employee || ""} onChange={(event) => onAccountFilterChange("employee", event.target.value)}>
+              <option value="">全部员工</option>
+              {options.employees.map((value) => <option value={value} key={value}>{value}</option>)}
+              <option value="未分配">未分配</option>
+            </select>
+            <select className="filter-select" value={accountFilters.post_today || ""} onChange={(event) => onAccountFilterChange("post_today", event.target.value)}>
+              <option value="">今日发文：全部</option>
+              <option value="yes">今日已发</option>
+              <option value="no">今日未发</option>
+            </select>
+            <select className="filter-select" value={accountFilters.sort || "plays_desc"} onChange={(event) => onAccountFilterChange("sort", event.target.value)}>
+              {Object.entries(sortOptions).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+            </select>
+            <button className="ghost-light-button" onClick={clearAccountFilters}>清除筛选</button>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>账号</th><th>分组</th><th>粉丝</th><th>视频</th><th>总播放</th><th>最后同步</th><th></th></tr></thead>
+              <thead><tr><th>账号</th><th>标签</th><th>粉丝</th><th>今日</th><th>新发播放</th><th>今日增播</th><th>总播放</th><th>24h</th><th></th></tr></thead>
               <tbody>
                 {accounts.map((account) => (
                   <tr key={account.id}>
                     <td><button className="link-button" onClick={() => onOpenAccount(account.id)}>@{account.username}</button><span>{account.nickname || account.employee || "未标注"}</span></td>
-                    <td>{account.group || "-"}</td>
+                    <td><span>{account.group || "未分组"}</span><small>{account.phone || "-"} · {account.employee || "未分配"}</small></td>
                     <td>{compactNumber(account.followers)}</td>
-                    <td>{account.videos}</td>
+                    <td>{account.posted_today ? <span className="post-badge post-yes">+{account.today_post_count || 0}</span> : <span className="post-badge post-no">未发</span>}</td>
+                    <td>{account.today_new_plays ? compactNumber(account.today_new_plays) : "-"}</td>
+                    <td>{signedNumber(account.growth?.today_plays_increase)}</td>
                     <td>{compactNumber(account.total_plays)}</td>
-                    <td>{formatDate(account.last_sync)}</td>
+                    <td>{signedNumber(account.growth?.plays_increase)}</td>
                     <td><button className="icon-button" title="同步账号" disabled={busy || !authenticated} onClick={() => onSync(account.id)}><RefreshCcw aria-hidden="true" /></button></td>
                   </tr>
                 ))}

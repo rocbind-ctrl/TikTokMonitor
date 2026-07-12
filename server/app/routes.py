@@ -513,6 +513,65 @@ def _sync_log_payload(log: SyncLog) -> dict:
     }
 
 
+def _account_row_payload(row: dict) -> dict:
+    account = row["account"]
+    payload = _account_payload(account)
+    today_latest = row.get("today_latest_video")
+    payload.update(
+        {
+            "total_plays": int(row.get("total_plays") or 0),
+            "growth": row.get("growth") or {},
+            "today_post_count": int(row.get("today_post_count") or 0),
+            "today_new_plays": int(row.get("today_new_plays") or 0),
+            "posted_today": bool(row.get("posted_today")),
+            "today_latest_video": _video_payload(today_latest, include_account=False) if today_latest else None,
+            "today_videos": [
+                _video_payload(video, include_account=False)
+                for video in row.get("today_videos") or []
+            ],
+        }
+    )
+    return payload
+
+
+def _group_stat_payload(row: dict) -> dict:
+    return {
+        "group_name": row["group_name"],
+        "account_count": row["account_count"],
+        "total_plays": row["total_plays"],
+        "plays_24h": row["plays_24h"],
+        "top_accounts": [
+            {
+                "id": item["account"].id,
+                "username": item["account"].username,
+                "nickname": item["account"].nickname,
+                "total_plays": item["total_plays"],
+                "plays_24h": item["plays_24h"],
+            }
+            for item in row.get("top_accounts") or []
+        ],
+    }
+
+
+def _account_filters_meta(
+    *,
+    group: str,
+    phone: str,
+    employee: str,
+    search: str,
+    post_today: str,
+    sort: str,
+) -> dict:
+    return {
+        "group": group,
+        "phone": phone,
+        "employee": employee,
+        "q": search,
+        "post_today": post_today,
+        "sort": sort,
+    }
+
+
 @app.get("/api/v2/health")
 def api_v2_health(db: Session = Depends(get_db)):
     overview = system_overview(db)
@@ -585,11 +644,91 @@ def api_v2_stats(db: Session = Depends(get_db)):
     )
 
 
+@app.get("/api/v2/dashboard")
+def api_v2_dashboard(db: Session = Depends(get_db)):
+    metrics = load_active_accounts_metrics(db)
+    _, _, global_totals, _ = query_accounts(db, per_page=1, metrics=metrics)
+    today = today_publish_summary_db(db)
+    today["plays_increase"] = global_totals["plays_today"]
+    return _v2_success(
+        {
+            "today": today,
+            "filter_totals": global_totals,
+            "employee_report": employee_post_report_db(db, days=7, metrics=metrics),
+            "group_stats": [_group_stat_payload(row) for row in group_stats_list(db, metrics=metrics)],
+            "options": {
+                "groups": distinct_values(db, Account.group_name),
+                "phones": distinct_values(db, Account.phone),
+                "employees": distinct_values(db, Account.employee),
+                "sort_options": ACCOUNT_SORT_OPTIONS,
+            },
+            "sync": {
+                "progress": get_progress(),
+                "queue_size": pending_sync_count(),
+                "syncing_ids": syncing_ids(),
+            },
+        }
+    )
+
+
 @app.get("/api/v2/accounts")
-def api_v2_list_accounts(page: int = 1, per_page: int = 50, db: Session = Depends(get_db)):
-    query = db.query(Account).options(joinedload(Account.videos)).order_by(Account.id)
-    rows, meta = _v2_page(query, page, per_page)
-    return _v2_success([_account_payload(account) for account in rows], meta=meta)
+def api_v2_list_accounts(
+    page: int = 1,
+    per_page: int = 50,
+    q: str = "",
+    group: str = "",
+    phone: str = "",
+    employee: str = "",
+    post_today: str = "",
+    sort: str = "plays_desc",
+    db: Session = Depends(get_db),
+):
+    search = q.strip()
+    group = group.strip()
+    phone = phone.strip()
+    employee = employee.strip()
+    post_today = post_today.strip()
+    if post_today not in ("", "yes", "no"):
+        post_today = ""
+    if sort not in ACCOUNT_SORT_OPTIONS:
+        sort = "plays_desc"
+    per_page = min(V2_MAX_PAGE_SIZE, max(1, per_page))
+    metrics = load_active_accounts_metrics(db)
+    rows, total, filter_totals, page = query_accounts(
+        db,
+        group=group,
+        phone=phone,
+        employee=employee,
+        search=search,
+        post_today=post_today,
+        sort=sort,
+        page=page,
+        per_page=per_page,
+        metrics=metrics,
+    )
+    meta = {
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+        "filters": _account_filters_meta(
+            group=group,
+            phone=phone,
+            employee=employee,
+            search=search,
+            post_today=post_today,
+            sort=sort,
+        ),
+        "filter_totals": filter_totals,
+        "sort_options": ACCOUNT_SORT_OPTIONS,
+        "options": {
+            "groups": distinct_values(db, Account.group_name),
+            "phones": distinct_values(db, Account.phone),
+            "employees": distinct_values(db, Account.employee),
+        },
+    }
+    return _v2_success([_account_row_payload(row) for row in rows], meta=meta)
+
 
 
 @app.post("/api/v2/accounts")
