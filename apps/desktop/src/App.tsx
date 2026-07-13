@@ -90,9 +90,14 @@ function profileUrl(username: string | undefined) {
   return clean ? `https://www.tiktok.com/@${clean}` : "";
 }
 
+function videoUrlForUsername(username: string | undefined, videoId: string | undefined) {
+  const cleanVideoId = (videoId || "").trim();
+  const accountUrl = profileUrl(username);
+  return accountUrl && cleanVideoId ? `${accountUrl}/video/${cleanVideoId}` : "";
+}
+
 function videoUrl(video: Pick<Video, "video_id" | "account">) {
-  if (!video.video_id || !video.account?.username) return "";
-  return `${profileUrl(video.account.username)}/video/${video.video_id}`;
+  return videoUrlForUsername(video.account?.username, video.video_id);
 }
 
 function operationTime() {
@@ -1169,7 +1174,9 @@ export default function App() {
             busy={busy}
             onSync={() => void syncOne(accountDetail.id)}
             onVideo={(id) => void openVideo(id)}
+            onCopyUsername={() => void copyText(`@${accountDetail.username}`, `@${accountDetail.username} 用户名`)}
             onCopyProfile={() => void copyText(profileUrl(accountDetail.username), `@${accountDetail.username} 主页链接`)}
+            onCopyVideoLink={(video) => void copyText(videoUrlForUsername(accountDetail.username, video.video_id), "视频链接")}
             onShowLogs={() => showAccountLogs(accountDetail.id)}
             onShowAudit={() => showAccountAudit(accountDetail.id)}
             onShowAlerts={() => showAlertCenterForAccount(accountDetail)}
@@ -1177,7 +1184,16 @@ export default function App() {
             onLogPage={(page) => void openAccount(accountDetail.id, accountDetail.videos_meta?.page || 1, page)}
           />
         ) : null}
-        {view === "video" && videoDetail ? <VideoPage video={videoDetail} onAccount={(id) => void openAccount(id)} onCopyLink={() => void copyText(videoUrl(videoDetail), "视频链接")} onHistoryPage={(page) => void openVideo(videoDetail.id, page)} /> : null}
+        {view === "video" && videoDetail ? (
+          <VideoPage
+            video={videoDetail}
+            onAccount={(id) => void openAccount(id)}
+            onCopyLink={() => void copyText(videoUrl(videoDetail), "视频链接")}
+            onCopyVideoId={() => void copyText(videoDetail.video_id || "", "视频 ID")}
+            onCopyAuthorProfile={() => void copyText(profileUrl(videoDetail.account?.username), `@${videoDetail.account?.username || "账号"} 主页链接`)}
+            onHistoryPage={(page) => void openVideo(videoDetail.id, page)}
+          />
+        ) : null}
         {view === "import" ? (
           <ImportPage
             text={importText}
@@ -2515,12 +2531,14 @@ function EditableAccountTags({
   );
 }
 
-function AccountPage({ account, busy, onSync, onVideo, onCopyProfile, onShowLogs, onShowAudit, onShowAlerts, onVideoPage, onLogPage }: {
+function AccountPage({ account, busy, onSync, onVideo, onCopyUsername, onCopyProfile, onCopyVideoLink, onShowLogs, onShowAudit, onShowAlerts, onVideoPage, onLogPage }: {
   account: AccountDetail;
   busy: boolean;
   onSync: () => void;
   onVideo: (id: number) => void;
+  onCopyUsername: () => void;
   onCopyProfile: () => void;
+  onCopyVideoLink: (video: Video) => void;
   onShowLogs: () => void;
   onShowAudit: () => void;
   onShowAlerts: () => void;
@@ -2543,6 +2561,7 @@ function AccountPage({ account, busy, onSync, onVideo, onCopyProfile, onShowLogs
       <div className="profile-actions">
         <button className="primary-button" disabled={busy} onClick={onSync}><RefreshCcw aria-hidden="true" />同步账号</button>
         <a className="ghost-light-button" href={profileUrl(account.username)} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />打开 TikTok</a>
+        <button className="ghost-light-button" onClick={onCopyUsername}><Copy aria-hidden="true" />复制用户名</button>
         <button className="ghost-light-button" onClick={onCopyProfile}><Copy aria-hidden="true" />复制主页</button>
       </div>
     </section>
@@ -2578,7 +2597,25 @@ function AccountPage({ account, busy, onSync, onVideo, onCopyProfile, onShowLogs
     <section className="panel">
       <div className="panel-head"><h2>最近视频</h2><span>{videos.length} 条</span></div>
       <div className="table-wrap"><table><thead><tr><th>标题</th><th>播放</th><th>点赞</th><th>评论</th><th>发布时间</th></tr></thead><tbody>
-        {videos.map((video) => <tr key={video.id}><td><button className="link-button" onClick={() => onVideo(video.id)}>{video.title || "无标题视频"}</button></td><td>{compactNumber(video.play_count)}</td><td>{compactNumber(video.like_count)}</td><td>{compactNumber(video.comment_count)}</td><td>{formatDate(video.published_at)}</td></tr>)}
+        {videos.map((video) => {
+          const tikTokUrl = videoUrlForUsername(account.username, video.video_id);
+          return (
+            <tr key={video.id}>
+              <td>
+                <button className="link-button" onClick={() => onVideo(video.id)}>{video.title || "无标题视频"}</button>
+                <div className="mini-action-row">
+                  <button onClick={() => onVideo(video.id)}>详情</button>
+                  {tikTokUrl ? <a href={tikTokUrl} target="_blank" rel="noreferrer">TikTok</a> : null}
+                  <button disabled={!tikTokUrl} onClick={() => onCopyVideoLink(video)}>复制链接</button>
+                </div>
+              </td>
+              <td>{compactNumber(video.play_count)}</td>
+              <td>{compactNumber(video.like_count)}</td>
+              <td>{compactNumber(video.comment_count)}</td>
+              <td>{formatDate(video.published_at)}</td>
+            </tr>
+          );
+        })}
       </tbody></table></div>
       {!videos.length ? (
         <EmptyState
@@ -2605,7 +2642,21 @@ function AccountPage({ account, busy, onSync, onVideo, onCopyProfile, onShowLogs
   </section>;
 }
 
-function VideoPage({ video, onAccount, onCopyLink, onHistoryPage }: { video: Video; onAccount: (id: number) => void; onCopyLink: () => void; onHistoryPage: (page: number) => void }) {
+function VideoPage({
+  video,
+  onAccount,
+  onCopyLink,
+  onCopyVideoId,
+  onCopyAuthorProfile,
+  onHistoryPage
+}: {
+  video: Video;
+  onAccount: (id: number) => void;
+  onCopyLink: () => void;
+  onCopyVideoId: () => void;
+  onCopyAuthorProfile: () => void;
+  onHistoryPage: (page: number) => void;
+}) {
   const tikTokUrl = videoUrl(video);
   return <section className="detail-layout">
     <section className="panel profile-panel">
@@ -2621,6 +2672,19 @@ function VideoPage({ video, onAccount, onCopyLink, onHistoryPage }: { video: Vid
         {video.account ? <button className="ghost-light-button" onClick={() => onAccount(video.account!.id)}><UserRound aria-hidden="true" />账号详情</button> : null}
         {tikTokUrl ? <a className="ghost-light-button" href={tikTokUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />打开 TikTok</a> : null}
         <button className="ghost-light-button" disabled={!tikTokUrl} onClick={onCopyLink}><Copy aria-hidden="true" />复制链接</button>
+        <button className="ghost-light-button" disabled={!video.video_id} onClick={onCopyVideoId}><Copy aria-hidden="true" />复制视频 ID</button>
+        {video.account ? <button className="ghost-light-button" onClick={onCopyAuthorProfile}><Copy aria-hidden="true" />复制作者主页</button> : null}
+      </div>
+    </section>
+    <section className="panel quick-nav-panel">
+      <div>
+        <h2>视频快捷操作</h2>
+        <p>需要复盘单条视频时，可以直接复制 ID、打开原视频，或跳回作者账号看整体表现。</p>
+      </div>
+      <div className="quick-nav-actions">
+        {video.account ? <button className="ghost-light-button" onClick={() => onAccount(video.account!.id)}><UserRound aria-hidden="true" />查看作者</button> : null}
+        {tikTokUrl ? <a className="ghost-light-button" href={tikTokUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />打开原视频</a> : null}
+        <button className="ghost-light-button" disabled={!tikTokUrl} onClick={onCopyLink}><Copy aria-hidden="true" />复制视频链接</button>
       </div>
     </section>
     <section className="metric-grid detail-metrics">

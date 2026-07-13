@@ -13,7 +13,7 @@ architecture.
 Latest published release commit:
 
 ```text
-9af434b Release 0.2.12 operator task safety
+b6dfb38 Release 0.2.13 desktop discoverability
 ```
 
 GitHub remote:
@@ -63,7 +63,7 @@ https://github.com/netwebqi/TikTokMonitor
 - Added desktop data insights, operations center, provider health, backup
   management, sync logs, and audit logs.
 - Added V2 backup and audit APIs with isolated test coverage.
-- Released 0.2.6 through 0.2.12 through GitHub Actions.
+- Released 0.2.6 through 0.2.13 through GitHub Actions.
 - Added 0.2.9 desktop usability improvements for operation feedback,
   persistent operation results, and clearer empty states.
 - Added 0.2.10 desktop account/video productivity improvements: table
@@ -76,15 +76,18 @@ https://github.com/netwebqi/TikTokMonitor
   clearer task duration/result feedback, sync duplicate guards, import
   confirmation, richer sync queue summaries, central server deployment, and
   online smoke tests.
-- Implemented 0.2.13 desktop discoverability improvements in the working tree:
-  dashboard workflow shortcuts and operator next-step guidance for common
-  actions such as data health, import, export, alerts, logs, and operations.
+- Released 0.2.13 desktop discoverability improvements: dashboard workflow
+  shortcuts, operator next-step guidance for common actions, GitHub Actions
+  desktop builds, and Windows installer artifact.
+- Implemented 0.2.14 account/video productivity improvements in the working
+  tree: account username copy, per-video TikTok/open/copy actions from account
+  detail, and video detail shortcuts for video ID, original video, and author
+  profile.
 
 ## Pending
 
 - Continue 0.2.x product work against the recovered replica feature set.
-- Validate and publish 0.2.13 desktop navigation and feature discoverability
-  improvements.
+- Validate and publish 0.2.14 account/video productivity improvements.
 - Keep deployment and release notes synchronized after each published version.
 - Plan the database migration path before the system becomes daily team
   infrastructure.
