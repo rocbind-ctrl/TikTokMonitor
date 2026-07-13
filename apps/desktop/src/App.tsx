@@ -1052,6 +1052,7 @@ export default function App() {
             onToggleActive={(account) => void toggleAccountActive(account)}
             onDeleteAccount={(account) => void deleteAccount(account)}
             onOpenAccount={(id) => void openAccount(id)}
+            onNavigate={setView}
             onCopyAccountLink={(account) => void copyText(profileUrl(account.username), `@${account.username} 主页链接`)}
             onAlert={(alert) => void handleAlert(alert)}
             onReadAll={() => markAllAlertsRead()}
@@ -1272,6 +1273,7 @@ function Dashboard({
   onToggleActive,
   onDeleteAccount,
   onOpenAccount,
+  onNavigate,
   onCopyAccountLink,
   onAlert,
   onReadAll
@@ -1319,6 +1321,7 @@ function Dashboard({
   onToggleActive: (account: Account) => void;
   onDeleteAccount: (account: Account) => void;
   onOpenAccount: (id: number) => void;
+  onNavigate: (view: View) => void;
   onCopyAccountLink: (account: Account) => void;
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
@@ -1370,6 +1373,55 @@ function Dashboard({
               </span>
             </section>
           ) : null}
+
+          <section className="panel quick-start-panel">
+            <div className="panel-head">
+              <div>
+                <h2>常用流程</h2>
+                <span>不知道下一步点哪里时，从这里开始。</span>
+              </div>
+            </div>
+            <div className="quick-action-grid">
+              <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("quality")}>
+                <AlertTriangle aria-hidden="true" />
+                <strong>检查数据健康</strong>
+                <span>找出未同步、无视频、同步失败和缺指标账号。</span>
+              </button>
+              <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("import")}>
+                <FileUp aria-hidden="true" />
+                <strong>批量导入账号</strong>
+                <span>粘贴用户名或主页链接，批量添加并可立即加入同步队列。</span>
+              </button>
+              <button className="quick-action-card" disabled={!authenticated} onClick={onExportAccounts}>
+                <Activity aria-hidden="true" />
+                <strong>导出当前报表</strong>
+                <span>按当前筛选导出账号 CSV，适合交接和复盘。</span>
+              </button>
+              <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("alerts")}>
+                <AlertTriangle aria-hidden="true" />
+                <strong>处理告警</strong>
+                <span>集中查看未读告警、异常和需要人工确认的问题。</span>
+              </button>
+              <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("logs")}>
+                <RefreshCcw aria-hidden="true" />
+                <strong>排查同步</strong>
+                <span>按状态、采集源和关键词查看最近同步日志。</span>
+              </button>
+              <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("operations")}>
+                <Server aria-hidden="true" />
+                <strong>服务器运维</strong>
+                <span>查看队列、采集源、备份和最近任务结果。</span>
+              </button>
+            </div>
+            <div className="operator-guide">
+              <span>推荐顺序</span>
+              <ol>
+                <li>先看数据健康，确认哪些账号需要补同步。</li>
+                <li>再用筛选/员工报表定位负责人和品类。</li>
+                <li>最后导出 CSV 或进入运维中心做备份与排查。</li>
+              </ol>
+            </div>
+          </section>
 
           {dashboard.group_stats.length ? (
             <section className="chip-row" aria-label="大品类筛选">

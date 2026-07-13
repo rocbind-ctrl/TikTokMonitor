@@ -456,6 +456,73 @@ h2 {
   background: #e9f6f8;
 }
 
+.quick-start-panel {
+  margin-bottom: 18px;
+}
+
+.quick-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-action-card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: start;
+  border: 1px solid #d8e0e3;
+  border-radius: 10px;
+  padding: 12px;
+  color: #17343b;
+  background: #fbfdfe;
+  text-align: left;
+}
+
+.quick-action-card:hover:not(:disabled) {
+  border-color: #0c6e7e;
+  box-shadow: 0 8px 24px rgba(23, 52, 59, 0.08);
+}
+
+.quick-action-card svg {
+  grid-row: span 2;
+  color: #0c6e7e;
+}
+
+.quick-action-card strong {
+  display: block;
+}
+
+.quick-action-card span {
+  color: #5c6c73;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.operator-guide {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  border-radius: 10px;
+  padding: 12px;
+  color: #405058;
+  background: #f5fafb;
+  font-size: 13px;
+}
+
+.operator-guide span {
+  flex: 0 0 auto;
+  color: #0c6e7e;
+  font-weight: 700;
+}
+
+.operator-guide ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
 .chip-row {
   display: flex;
   gap: 10px;
@@ -1257,6 +1324,7 @@ td small {
   .content-grid,
   .analytics-grid,
   .quality-grid,
+  .quick-action-grid,
   .entry-row,
   .account-filter-grid,
   .bulk-tag-panel,
@@ -1277,6 +1345,7 @@ td small {
   .profile-panel,
   .operations-hero,
   .task-card,
+  .operator-guide,
   .settings-actions {
     align-items: flex-start;
     flex-direction: column;

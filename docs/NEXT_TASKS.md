@@ -4,10 +4,10 @@ Updated: 2026-07-13
 
 ## Immediate Tasks
 
-1. Finish 0.2.12: validate and publish operator efficiency improvements.
-   - Run service tests plus desktop type/build checks.
-   - Commit and publish the 0.2.12 changes after validation.
-   - Deploy the server because sync V2 responses now include queue summaries.
+1. Finish 0.2.13: validate and publish desktop discoverability improvements.
+   - Run desktop type/build checks.
+   - Commit and publish the 0.2.13 changes after validation.
+   - Server deployment is not required unless a backend change is added later.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -52,23 +52,26 @@ Updated: 2026-07-13
 - Added desktop operations center, provider health, backup management, sync
   logs, and audit logs.
 - Added V2 backup and audit APIs with tests.
-- Released 0.2.6 through 0.2.11.
+- Released 0.2.6 through 0.2.12.
 - Added 0.2.9 desktop operation feedback and clearer empty states.
 - Added 0.2.10 account/video shortcuts, cross-links, video link actions, and
   safer bulk-update confirmations.
 - Released 0.2.11 data quality API, account quality filters, desktop data
   health page, server deployment, and online smoke tests.
-- Implemented 0.2.12 operation history, task duration/result feedback, sync
-  duplicate guards, import confirmation, and queue summary responses in the
-  working tree.
+- Released 0.2.12 operation history, task duration/result feedback, sync
+  duplicate guards, import confirmation, queue summary responses, server
+  deployment, and online smoke tests.
+- Implemented 0.2.13 dashboard workflow shortcuts and operator next-step
+  guidance in the working tree.
 
 ## Follow-up Product Tasks
 
 1. Close remaining account/video productivity gaps from the recovered replica.
 
-2. Add operator efficiency and long-running task safety improvements.
+2. Improve desktop navigation and feature discoverability for non-technical
+   operators.
 
-3. Improve docs and in-app guidance for non-technical team users.
+3. Close remaining account/video productivity gaps from the recovered replica.
 
 ## Engineering Tasks
 
@@ -82,7 +85,7 @@ Updated: 2026-07-13
 
 ## Current Local Artifacts
 
-- Windows 0.2.11 installer:
-  `release/tiktokmonitor-windows-0.2.11-data-quality-health/msi/TikTokMonitor_0.2.11_x64_en-US.msi`
+- Windows 0.2.12 installer:
+  `release/tiktokmonitor-windows-0.2.12-operator-task-safety/msi/TikTokMonitor_0.2.12_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.
