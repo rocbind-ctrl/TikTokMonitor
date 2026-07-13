@@ -515,6 +515,13 @@ h2 {
   margin-bottom: 14px;
 }
 
+.audit-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px) minmax(120px, 160px) minmax(100px, 130px) auto;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 .page-controls {
   display: flex;
   align-items: center;
@@ -1002,6 +1009,7 @@ td small {
   .account-filter-grid,
   .bulk-tag-panel,
   .log-filter-grid,
+  .audit-filter-grid,
   .operations-grid,
   .detail-metrics,
   .form-grid,

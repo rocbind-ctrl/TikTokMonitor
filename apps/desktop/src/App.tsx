@@ -22,6 +22,8 @@ import {
   AccountUpdate,
   Alert,
   AccountFilters,
+  AuditFilters,
+  AuditLog,
   BackupList,
   createApiClient,
   DashboardData,
@@ -38,7 +40,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "operations" | "backups" | "import" | "settings";
+type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
@@ -87,12 +89,15 @@ export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [logs, setLogs] = useState<SyncLog[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [accountsMeta, setAccountsMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [alertsMeta, setAlertsMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [logsMeta, setLogsMeta] = useState<PageMeta>(EMPTY_PAGE_META);
+  const [auditMeta, setAuditMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [accountPage, setAccountPage] = useState(1);
   const [alertPage, setAlertPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
+  const [auditPage, setAuditPage] = useState(1);
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
   const [backups, setBackups] = useState<BackupList | null>(null);
   const [view, setView] = useState<View>("dashboard");
@@ -103,6 +108,7 @@ export default function App() {
   const [alertLevel, setAlertLevel] = useState("");
   const [selectedAlertIds, setSelectedAlertIds] = useState<number[]>([]);
   const [logFilters, setLogFilters] = useState<LogFilters>({});
+  const [auditFilters, setAuditFilters] = useState<AuditFilters>({});
   const [savedAccountFilters, setSavedAccountFilters] = useState<SavedAccountFilter[]>(() => {
     try {
       const raw = localStorage.getItem(SAVED_ACCOUNT_FILTERS_KEY);
@@ -144,22 +150,25 @@ export default function App() {
         setAccounts([]);
         setAlerts([]);
         setLogs([]);
+        setAuditLogs([]);
         setAccountsMeta(EMPTY_PAGE_META);
         setAlertsMeta(EMPTY_PAGE_META);
         setLogsMeta(EMPTY_PAGE_META);
+        setAuditMeta(EMPTY_PAGE_META);
         setProviders([]);
         setBackups(null);
         setSelectedAlertIds([]);
         return;
       }
 
-      const [nextDashboard, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders, nextBackups] = await Promise.all([
+      const [nextDashboard, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextAuditLogs, nextProviders, nextBackups] = await Promise.all([
         client.dashboard(),
         client.insights(),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
         client.logs(logPage, 30, logFilters),
+        client.auditLogs(auditPage, 30, auditFilters),
         client.providers(),
         client.backups()
       ]);
@@ -169,9 +178,11 @@ export default function App() {
       setAccounts(nextAccounts.items);
       setAlerts(nextAlerts.items);
       setLogs(nextLogs.items);
+      setAuditLogs(nextAuditLogs.items);
       setAccountsMeta(nextAccounts.meta);
       setAlertsMeta(nextAlerts.meta);
       setLogsMeta(nextLogs.meta);
+      setAuditMeta(nextAuditLogs.meta);
       setProviders(nextProviders);
       setBackups(nextBackups);
     } catch (error) {
@@ -184,7 +195,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [accountFilters, accountPage, alertLevel, alertPage, api, logFilters, logPage, unreadOnly]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, unreadOnly]);
 
   useEffect(() => {
     void loadData();
@@ -232,6 +243,11 @@ export default function App() {
   function updateLogFilter(key: keyof LogFilters, value: string) {
     setLogFilters((current) => ({ ...current, [key]: value }));
     setLogPage(1);
+  }
+
+  function updateAuditFilter(key: keyof AuditFilters, value: string) {
+    setAuditFilters((current) => ({ ...current, [key]: value }));
+    setAuditPage(1);
   }
 
   function persistSavedAccountFilters(next: SavedAccountFilter[]) {
@@ -567,6 +583,7 @@ export default function App() {
     video: ["视频详情", "视频指标与历史快照。"],
     alerts: ["告警中心", "集中处理未读告警、异常提示和关联账号。"],
     logs: ["同步日志", "按状态、采集源和关键词排查同步任务。"],
+    audit: ["审计日志", "查看账号、同步、备份、告警和批量操作记录。"],
     providers: ["采集源健康", "查看 provider 成功率、延迟和最近失败情况。"],
     operations: ["运维中心", "集中查看服务器、同步、采集源、备份和最近日志。"],
     backups: ["备份管理", "查看、创建和下载服务器数据库备份。"],
@@ -639,6 +656,10 @@ export default function App() {
           <button className={view === "logs" ? "active" : ""} disabled={!authenticated} onClick={() => setView("logs")}>
             <RefreshCcw aria-hidden="true" />
             同步日志
+          </button>
+          <button className={view === "audit" ? "active" : ""} disabled={!authenticated} onClick={() => setView("audit")}>
+            <CheckCircle2 aria-hidden="true" />
+            审计日志
           </button>
           <button className={view === "providers" ? "active" : ""} disabled={!authenticated} onClick={() => setView("providers")}>
             <Server aria-hidden="true" />
@@ -808,6 +829,20 @@ export default function App() {
             onPage={setLogPage}
           />
         ) : null}
+        {view === "audit" ? (
+          <AuditLogsPage
+            logs={auditLogs}
+            meta={auditMeta}
+            page={auditPage}
+            filters={auditFilters}
+            onFilterChange={updateAuditFilter}
+            onClearFilters={() => {
+              setAuditFilters({});
+              setAuditPage(1);
+            }}
+            onPage={setAuditPage}
+          />
+        ) : null}
         {view === "providers" ? (
           <ProvidersPage providers={providers} />
         ) : null}
@@ -818,6 +853,7 @@ export default function App() {
             dashboard={dashboard}
             providers={providers}
             logs={logs}
+            auditLogs={auditLogs}
             backups={backups}
             busy={busy}
             authenticated={authenticated}
@@ -1461,6 +1497,80 @@ function LogsPage({
   );
 }
 
+function auditActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    add_account: "添加账号",
+    edit_account: "编辑账号",
+    delete_account: "删除账号",
+    bulk_tag_accounts: "批量标签",
+    sync_account: "同步账号",
+    sync_all: "全部同步",
+    import_accounts: "批量导入",
+    create_backup: "创建备份",
+    read_alert: "告警已读",
+    read_all_alerts: "全部告警已读",
+    mark_alerts_read: "批量告警已读",
+    toggle_account: "切换账号状态"
+  };
+  return labels[action] || action || "-";
+}
+
+function AuditLogsPage({
+  logs,
+  meta,
+  page,
+  filters,
+  onFilterChange,
+  onClearFilters,
+  onPage
+}: {
+  logs: AuditLog[];
+  meta: PageMeta;
+  page: number;
+  filters: AuditFilters;
+  onFilterChange: (key: keyof AuditFilters, value: string) => void;
+  onClearFilters: () => void;
+  onPage: (page: number) => void;
+}) {
+  const actions = meta.actions || [];
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>审计日志</h2>
+        <span>{meta.total} 条</span>
+      </div>
+      <div className="audit-filter-grid">
+        <input value={filters.q || ""} onChange={(event) => onFilterChange("q", event.target.value)} placeholder="搜索操作、详情、操作者或账号" />
+        <select className="filter-select" value={filters.action || ""} onChange={(event) => onFilterChange("action", event.target.value)}>
+          <option value="">全部操作</option>
+          {actions.map((action) => <option value={action} key={action}>{auditActionLabel(action)}</option>)}
+        </select>
+        <input value={filters.actor || ""} onChange={(event) => onFilterChange("actor", event.target.value)} placeholder="操作者" />
+        <input value={filters.account_id || ""} onChange={(event) => onFilterChange("account_id", event.target.value)} placeholder="账号 ID" />
+        <button className="ghost-light-button" onClick={onClearFilters}>清除筛选</button>
+      </div>
+      <div className="table-wrap">
+        <table className="compact-table">
+          <thead><tr><th>时间</th><th>操作</th><th>操作者</th><th>账号</th><th>详情</th></tr></thead>
+          <tbody>
+            {logs.map((log) => (
+              <tr key={log.id}>
+                <td>{formatDate(log.created_at)}</td>
+                <td><span className="level-badge level-info">{auditActionLabel(log.action)}</span><small>{log.action}</small></td>
+                <td>{log.actor || "system"}</td>
+                <td>{log.account_username ? `@${log.account_username}` : log.account_id ? `#${log.account_id}` : "-"}</td>
+                <td>{log.detail || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!logs.length ? <p className="empty-state">暂无符合条件的审计日志。</p> : null}
+      <PageControls meta={meta} page={page} onPage={onPage} />
+    </section>
+  );
+}
+
 function ProvidersPage({ providers }: { providers: ProviderHealth[] }) {
   const available = providers.filter((provider) => provider.available !== false).length;
   return (
@@ -1498,6 +1608,7 @@ function OperationsPage({
   dashboard,
   providers,
   logs,
+  auditLogs,
   backups,
   busy,
   authenticated,
@@ -1511,6 +1622,7 @@ function OperationsPage({
   dashboard: DashboardData | null;
   providers: ProviderHealth[];
   logs: SyncLog[];
+  auditLogs: AuditLog[];
   backups: BackupList | null;
   busy: boolean;
   authenticated: boolean;
@@ -1645,6 +1757,23 @@ function OperationsPage({
           </table>
         </div>
         {!logs.length ? <p className="empty-state">暂无同步日志。</p> : null}
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>最近审计日志</h2>
+          <span>{auditLogs.length} 条</span>
+        </div>
+        <div className="stack-list">
+          {auditLogs.slice(0, 6).map((log) => (
+            <article className="list-item" key={log.id}>
+              <strong>{auditActionLabel(log.action)}</strong>
+              <span>{log.detail || "-"}</span>
+              <small>{formatDate(log.created_at)} · {log.actor || "system"}{log.account_username ? ` · @${log.account_username}` : ""}</small>
+            </article>
+          ))}
+          {!auditLogs.length ? <p className="empty-state">暂无审计日志。</p> : null}
+        </div>
       </section>
     </section>
   );

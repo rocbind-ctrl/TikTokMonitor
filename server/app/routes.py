@@ -569,6 +569,18 @@ def _sync_log_payload(log: SyncLog) -> dict:
     }
 
 
+def _audit_log_payload(log: AuditLog, account_username: str | None = None) -> dict:
+    return {
+        "id": log.id,
+        "action": log.action,
+        "detail": log.detail,
+        "actor": log.actor,
+        "account_id": log.account_id,
+        "account_username": account_username,
+        "created_at": _iso(log.created_at),
+    }
+
+
 def _account_row_payload(row: dict) -> dict:
     account = row["account"]
     payload = _account_payload(account)
@@ -875,12 +887,14 @@ def api_v2_list_backups():
 
 
 @app.post("/api/v2/backups")
-def api_v2_create_backup(keep_days: int = 30):
+def api_v2_create_backup(keep_days: int = 30, db: Session = Depends(get_db)):
     keep_days = min(365, max(0, keep_days))
     try:
         path = _create_sqlite_backup(keep_days=keep_days)
     except FileNotFoundError as exc:
         return _v2_error("database_not_found", str(exc), status_code=404)
+    log_action(db, "create_backup", path.name)
+    db.commit()
     return _v2_success(_backup_payload(path), status_code=201)
 
 
@@ -1179,6 +1193,7 @@ def api_v2_read_alert(alert_id: int, db: Session = Depends(get_db)):
     if not alert:
         return _v2_error("alert_not_found", "Alert not found", status_code=404)
     alert.is_read = 1
+    log_action(db, "read_alert", f"Alert #{alert_id}", account_id=alert.account_id)
     db.commit()
     return _v2_success({"id": alert_id, "is_read": True})
 
@@ -1186,6 +1201,7 @@ def api_v2_read_alert(alert_id: int, db: Session = Depends(get_db)):
 @app.post("/api/v2/alerts/read-all")
 def api_v2_read_all_alerts(db: Session = Depends(get_db)):
     updated = db.query(Alert).filter(Alert.is_read == 0).update({"is_read": 1})
+    log_action(db, "read_all_alerts", f"Marked {updated} alerts read")
     db.commit()
     return _v2_success({"updated": updated})
 
@@ -1204,6 +1220,7 @@ async def api_v2_mark_alerts_read(request: Request, db: Session = Depends(get_db
     updated = db.query(Alert).filter(Alert.id.in_(alert_ids), Alert.is_read == 0).update(
         {"is_read": 1}, synchronize_session=False
     )
+    log_action(db, "mark_alerts_read", f"Marked {updated}/{len(alert_ids)} selected alerts read")
     db.commit()
     return _v2_success({"updated": updated, "alert_ids": alert_ids})
 
@@ -1247,12 +1264,64 @@ def api_v2_sync_logs(
     return _v2_success([_sync_log_payload(log) for log in rows], meta=meta)
 
 
+@app.get("/api/v2/audit/logs")
+def api_v2_audit_logs(
+    page: int = 1,
+    per_page: int = 50,
+    action: str = "",
+    actor: str = "",
+    account_id: int | None = None,
+    q: str = "",
+    db: Session = Depends(get_db),
+):
+    action = action.strip()
+    actor = actor.strip()
+    search = q.strip()
+    query = (
+        db.query(AuditLog, Account.username.label("account_username"))
+        .outerjoin(Account, AuditLog.account_id == Account.id)
+        .order_by(desc(AuditLog.created_at), desc(AuditLog.id))
+    )
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if actor:
+        query = query.filter(AuditLog.actor.ilike(f"%{actor}%"))
+    if account_id is not None:
+        query = query.filter(AuditLog.account_id == account_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            (AuditLog.action.ilike(like))
+            | (AuditLog.detail.ilike(like))
+            | (AuditLog.actor.ilike(like))
+            | (Account.username.ilike(like))
+        )
+    rows, meta = _v2_page(query, page, per_page)
+    meta["filters"] = {
+        "action": action,
+        "actor": actor,
+        "account_id": account_id,
+        "q": search,
+    }
+    meta["actions"] = [
+        row[0]
+        for row in db.query(AuditLog.action)
+        .filter(AuditLog.action != "")
+        .distinct()
+        .order_by(AuditLog.action)
+        .all()
+    ]
+    return _v2_success([_audit_log_payload(log, account_username) for log, account_username in rows], meta=meta)
+
+
 @app.post("/api/v2/accounts/{account_id}/sync")
 def api_v2_sync_account(account_id: int, db: Session = Depends(get_db)):
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
         return _v2_error("account_not_found", "Account not found", status_code=404)
     enqueue_account_sync([account_id])
+    log_action(db, "sync_account", f"@{account.username} queued for sync", account_id=account.id)
+    db.commit()
     return _v2_success(
         {"status": "success", "account_id": account_id, "message": f"@{account.username} queued for sync"}
     )
@@ -1263,6 +1332,8 @@ def api_v2_sync_all(db: Session = Depends(get_db)):
     ids = [row.id for row in db.query(Account.id).filter(Account.is_active == 1).order_by(Account.id).all()]
     if ids:
         enqueue_account_sync(ids)
+    log_action(db, "sync_all", f"Queued {len(ids)} active accounts")
+    db.commit()
     return _v2_success(
         {
             "status": "success",
@@ -1327,6 +1398,12 @@ async def api_v2_import_accounts(request: Request, db: Session = Depends(get_db)
     sync_ids = list(dict.fromkeys(added_ids + updated_ids))
     if payload.get("sync", True) and sync_ids:
         enqueue_account_sync(sync_ids)
+    log_action(
+        db,
+        "import_accounts",
+        f"Imported {len(added_ids)} new, updated {len(updated_ids)}, queued {len(sync_ids) if payload.get('sync', True) else 0}",
+    )
+    db.commit()
     return _v2_success(
         {
             "added": len(added_ids),

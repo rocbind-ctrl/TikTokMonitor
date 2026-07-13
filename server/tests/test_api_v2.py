@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import auth, routes
-from app.database import Account, AccountStatsHistory, Alert, Base, ProviderHealth, SyncLog, Video, VideoStatsHistory, get_db
+from app.database import Account, AccountStatsHistory, Alert, AuditLog, Base, ProviderHealth, SyncLog, Video, VideoStatsHistory, get_db
 
 
 class ApiV2TestCase(unittest.TestCase):
@@ -68,7 +68,7 @@ class ApiV2TestCase(unittest.TestCase):
     def setUp(self):
         db = self.Session()
         try:
-            for model in (VideoStatsHistory, AccountStatsHistory, Alert, SyncLog, ProviderHealth, Video, Account):
+            for model in (VideoStatsHistory, AccountStatsHistory, Alert, SyncLog, ProviderHealth, AuditLog, Video, Account):
                 db.query(model).delete()
             db.commit()
         finally:
@@ -276,6 +276,31 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.json()["data"]["phone"], "Phone B")
         self.assertEqual(second.json()["data"]["employee"], "Bob")
+
+    def test_v2_audit_logs_support_pagination_and_filters(self):
+        self.login()
+        account_id = self.create_account("audit-account")
+
+        synced = self.client.post(f"/api/v2/accounts/{account_id}/sync")
+        self.assertEqual(synced.status_code, 200)
+
+        listed = self.client.get("/api/v2/audit/logs?page=1&per_page=10")
+        self.assertEqual(listed.status_code, 200)
+        body = listed.json()
+        self.assertTrue(body["ok"])
+        self.assertGreaterEqual(body["meta"]["total"], 2)
+        actions = [item["action"] for item in body["data"]]
+        self.assertIn("add_account", actions)
+        self.assertIn("sync_account", actions)
+        self.assertIn("sync_account", body["meta"]["actions"])
+
+        filtered = self.client.get("/api/v2/audit/logs?action=sync_account&q=audit-account")
+        self.assertEqual(filtered.status_code, 200)
+        filtered_body = filtered.json()
+        self.assertEqual(filtered_body["meta"]["filters"]["action"], "sync_account")
+        self.assertEqual(filtered_body["meta"]["total"], 1)
+        self.assertEqual(filtered_body["data"][0]["account_id"], account_id)
+        self.assertEqual(filtered_body["data"][0]["account_username"], "audit-account")
 
     def test_v2_backup_list_create_and_download(self):
         self.login()

@@ -119,6 +119,16 @@ export interface SyncLog {
   created_at: string;
 }
 
+export interface AuditLog {
+  id: number;
+  action: string;
+  detail: string;
+  actor: string;
+  account_id: number | null;
+  account_username?: string | null;
+  created_at: string;
+}
+
 export interface AccountDetail extends Account {
   video_items: Video[];
   logs: SyncLog[];
@@ -141,6 +151,7 @@ export interface PageMeta {
   filter_totals?: DashboardTotals;
   sort_options?: Record<string, string>;
   options?: DashboardOptions;
+  actions?: string[];
 }
 
 export interface Paginated<T> {
@@ -341,6 +352,13 @@ export interface LogFilters {
   q?: string;
   status?: string;
   provider?: string;
+  account_id?: number | string;
+}
+
+export interface AuditFilters {
+  q?: string;
+  action?: string;
+  actor?: string;
   account_id?: number | string;
 }
 
@@ -578,6 +596,16 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
         if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
       });
       return requestPage<SyncLog>(`/api/v2/sync/logs?${params.toString()}`, { method: "GET" });
+    },
+    auditLogs: (page = 1, perPage = 30, filters: AuditFilters = {}) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(perPage)
+      });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+      });
+      return requestPage<AuditLog>(`/api/v2/audit/logs?${params.toString()}`, { method: "GET" });
     },
     providers: () => request<ProviderHealth[]>("/api/v2/providers/health", { method: "GET" }),
     syncAll: () => request<{ status: string; message: string }>("/api/v2/sync/all", { method: "POST" }),
