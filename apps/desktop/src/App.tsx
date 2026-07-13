@@ -42,6 +42,12 @@ import {
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
 type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
+type OperationState = {
+  status: "running" | "success" | "error";
+  title: string;
+  detail: string;
+  timestamp: string;
+};
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
 
@@ -70,6 +76,18 @@ function formatDate(value: string | null | undefined) {
 function signedNumber(value: number | undefined) {
   const number = value || 0;
   return `${number > 0 ? "+" : ""}${compactNumber(number)}`;
+}
+
+function operationTime() {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date());
+}
+
+function errorDetail(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export default function App() {
@@ -127,13 +145,21 @@ export default function App() {
   const [importSync, setImportSync] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [operation, setOperation] = useState<OperationState | null>(null);
 
   const api = useMemo(() => createApiClient(serverUrl, sessionToken), [serverUrl, sessionToken]);
   const authenticated = session ? session.authenticated || !session.auth_enabled : false;
 
-  const loadData = useCallback(async (client = api) => {
+  function reportOperation(status: OperationState["status"], title: string, detail: string) {
+    setOperation({ status, title, detail, timestamp: operationTime() });
+  }
+
+  const loadData = useCallback(async (client = api, options: { announce?: boolean } = {}) => {
     setBusy(true);
-    setMessage("");
+    if (options.announce) {
+      setMessage("");
+      setOperation({ status: "running", title: "刷新数据", detail: "正在从服务器读取最新账号、日志和运维状态…", timestamp: operationTime() });
+    }
     try {
       const [nextSession, nextHealth] = await Promise.all([
         client.session(),
@@ -185,17 +211,30 @@ export default function App() {
       setAuditMeta(nextAuditLogs.meta);
       setProviders(nextProviders);
       setBackups(nextBackups);
+      if (options.announce) {
+        setOperation({
+          status: "success",
+          title: "刷新完成",
+          detail: `已更新 ${nextAccounts.meta.total} 个账号、${nextAlerts.meta.total} 条告警、${nextLogs.meta.total} 条同步日志。`,
+          timestamp: operationTime()
+        });
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "连接失败";
-      setMessage(
+      const nextMessage =
         detail === "Failed to fetch"
           ? `连接失败：${serverUrl}。请确认服务器地址、端口、防火墙，以及 Windows 安装版是否已更新到最新版本。`
-          : detail
+          : detail;
+      setMessage(
+        nextMessage
       );
+      if (options.announce) {
+        setOperation({ status: "error", title: "刷新失败", detail: nextMessage, timestamp: operationTime() });
+      }
     } finally {
       setBusy(false);
     }
-  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, unreadOnly]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, serverUrl, unreadOnly]);
 
   useEffect(() => {
     void loadData();
@@ -204,6 +243,7 @@ export default function App() {
   async function login() {
     setBusy(true);
     setMessage("");
+    reportOperation("running", "登录服务器", "正在验证密码并建立桌面端会话…");
     try {
       const result = await api.login(password);
       if (result.session_token) {
@@ -212,8 +252,11 @@ export default function App() {
       }
       setPassword("");
       await loadData(result.session_token ? createApiClient(serverUrl, result.session_token) : api);
+      reportOperation("success", "登录成功", "会话已建立，已刷新服务器数据。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "登录失败");
+      const detail = errorDetail(error, "登录失败");
+      setMessage(detail);
+      reportOperation("error", "登录失败", detail);
     } finally {
       setBusy(false);
     }
@@ -233,6 +276,7 @@ export default function App() {
     localStorage.removeItem("tiktokmonitor.sessionToken");
     setSessionToken("");
     setServerUrl(normalized);
+    reportOperation("success", "服务器地址已保存", `当前连接地址：${normalized}`);
   }
 
   function updateAccountFilter(key: keyof AccountFilters, value: string) {
@@ -294,12 +338,17 @@ export default function App() {
 
   async function exportAccountsCsv() {
     setBusy(true);
+    setMessage("");
+    const filename = `accounts_${new Date().toISOString().slice(0, 10)}.csv`;
+    reportOperation("running", "导出账号 CSV", `正在按当前筛选导出 ${accountsMeta.total} 个账号…`);
     try {
       const csv = await api.exportAccountsCsv(accountFilters);
-      downloadTextFile(`accounts_${new Date().toISOString().slice(0, 10)}.csv`, csv);
-      setMessage("账号 CSV 已导出");
+      downloadTextFile(filename, csv);
+      reportOperation("success", "账号 CSV 已导出", `文件已交给系统下载：${filename}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "导出账号失败");
+      const detail = errorDetail(error, "导出账号失败");
+      setMessage(detail);
+      reportOperation("error", "导出账号失败", detail);
     } finally {
       setBusy(false);
     }
@@ -307,12 +356,17 @@ export default function App() {
 
   async function exportVideosCsv() {
     setBusy(true);
+    setMessage("");
+    const filename = `videos_${new Date().toISOString().slice(0, 10)}.csv`;
+    reportOperation("running", "导出视频 CSV", `正在导出 ${stats?.total_videos || 0} 条视频记录…`);
     try {
       const csv = await api.exportVideosCsv();
-      downloadTextFile(`videos_${new Date().toISOString().slice(0, 10)}.csv`, csv);
-      setMessage("视频 CSV 已导出");
+      downloadTextFile(filename, csv);
+      reportOperation("success", "视频 CSV 已导出", `文件已交给系统下载：${filename}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "导出视频失败");
+      const detail = errorDetail(error, "导出视频失败");
+      setMessage(detail);
+      reportOperation("error", "导出视频失败", detail);
     } finally {
       setBusy(false);
     }
@@ -320,12 +374,16 @@ export default function App() {
 
   async function createBackup() {
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "创建数据库备份", "正在请求服务器生成 SQLite 数据库快照…");
     try {
-      await api.createBackup(30);
+      const backup = await api.createBackup(30);
       setBackups(await api.backups());
-      setMessage("备份已创建，可在备份管理中下载。");
+      reportOperation("success", "备份已创建", `${backup.name} · ${formatBytes(backup.size)}，可在备份管理中下载。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "创建备份失败");
+      const detail = errorDetail(error, "创建备份失败");
+      setMessage(detail);
+      reportOperation("error", "创建备份失败", detail);
     } finally {
       setBusy(false);
     }
@@ -333,12 +391,16 @@ export default function App() {
 
   async function downloadBackup(name: string) {
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "下载备份", `正在下载 ${name}…`);
     try {
       const content = await api.downloadBackup(name);
       downloadBlobFile(name, new Blob([content], { type: "application/octet-stream" }));
-      setMessage(`备份已开始下载：${name}`);
+      reportOperation("success", "备份已开始下载", `文件已交给系统下载：${name}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "下载备份失败");
+      const detail = errorDetail(error, "下载备份失败");
+      setMessage(detail);
+      reportOperation("error", "下载备份失败", detail);
     } finally {
       setBusy(false);
     }
@@ -347,9 +409,11 @@ export default function App() {
   async function addAccount() {
     if (!newUsername.trim()) return;
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "添加账号", `正在添加 @${newUsername.trim().replace(/^@/, "")}…`);
     try {
       const result = await api.addAccount(newUsername, newGroup);
-      setMessage(result.message);
+      reportOperation(result.status === "exists" ? "success" : "success", result.status === "exists" ? "账号已存在" : "账号已添加", result.message);
       setNewUsername("");
       setNewGroup("");
       if (result.status === "exists") {
@@ -358,7 +422,9 @@ export default function App() {
         await loadData();
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "添加失败");
+      const detail = errorDetail(error, "添加失败");
+      setMessage(detail);
+      reportOperation("error", "添加账号失败", detail);
     } finally {
       setBusy(false);
     }
@@ -366,12 +432,16 @@ export default function App() {
 
   async function syncAll() {
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "全部同步", `正在把 ${stats?.active_accounts || accountsMeta.total || 0} 个启用账号加入同步队列…`);
     try {
       const result = await api.syncAll();
-      setMessage(result.message);
       await loadData();
+      reportOperation("success", "全部同步已触发", result.message || "同步任务已加入队列，可在运维中心查看进度。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "同步失败");
+      const detail = errorDetail(error, "同步失败");
+      setMessage(detail);
+      reportOperation("error", "全部同步失败", detail);
     } finally {
       setBusy(false);
     }
@@ -379,12 +449,17 @@ export default function App() {
 
   async function syncOne(accountId: number) {
     setBusy(true);
+    setMessage("");
+    const account = accounts.find((item) => item.id === accountId) || (accountDetail?.id === accountId ? accountDetail : null);
+    reportOperation("running", "同步账号", `正在触发 ${account ? `@${account.username}` : `账号 #${accountId}`} 同步…`);
     try {
       const result = await api.syncAccount(accountId);
-      setMessage(result.message);
       await loadData();
+      reportOperation("success", "账号同步已触发", result.message || "同步任务已加入队列，可稍后刷新查看结果。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "同步失败");
+      const detail = errorDetail(error, "同步失败");
+      setMessage(detail);
+      reportOperation("error", "账号同步失败", detail);
     } finally {
       setBusy(false);
     }
@@ -392,14 +467,18 @@ export default function App() {
 
   async function updateAccount(accountId: number, payload: AccountUpdate) {
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "保存账号信息", "正在保存账号标签、员工、手机或备注…");
     try {
       const account = await api.updateAccount(accountId, payload);
       setAccounts((current) => current.map((item) => item.id === accountId ? { ...item, ...account } : item));
       setAccountDetail((current) => current?.id === accountId ? { ...current, ...account } : current);
-      setMessage("账号信息已保存");
       await loadData();
+      reportOperation("success", "账号信息已保存", `@${account.username} 的资料已更新。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "保存账号信息失败");
+      const detail = errorDetail(error, "保存账号信息失败");
+      setMessage(detail);
+      reportOperation("error", "保存账号信息失败", detail);
     } finally {
       setBusy(false);
     }
@@ -408,12 +487,16 @@ export default function App() {
   async function bulkUpdateAccounts(updates: AccountUpdate) {
     if (!window.confirm(`确定要批量更新当前筛选出的 ${accountsMeta.total} 个账号吗？`)) return;
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "批量更新账号", `正在更新当前筛选出的 ${accountsMeta.total} 个账号…`);
     try {
       const result = await api.bulkUpdateAccounts(accountFilters, updates);
-      setMessage(`批量更新完成：${result.updated} 个账号`);
       await loadData();
+      reportOperation("success", "批量更新完成", `已更新 ${result.updated} 个账号。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "批量更新失败");
+      const detail = errorDetail(error, "批量更新失败");
+      setMessage(detail);
+      reportOperation("error", "批量更新失败", detail);
     } finally {
       setBusy(false);
     }
@@ -422,16 +505,20 @@ export default function App() {
   async function deleteAccount(account: Account) {
     if (!window.confirm(`确定删除 @${account.username} 吗？该操作会删除本地账号和关联记录。`)) return;
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "删除账号", `正在删除 @${account.username}…`);
     try {
       await api.deleteAccount(account.id);
-      setMessage(`@${account.username} 已删除`);
       if (accountDetail?.id === account.id) {
         setAccountDetail(null);
         setView("dashboard");
       }
       await loadData();
+      reportOperation("success", "账号已删除", `@${account.username} 已从监控列表移除。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "删除账号失败");
+      const detail = errorDetail(error, "删除账号失败");
+      setMessage(detail);
+      reportOperation("error", "删除账号失败", detail);
     } finally {
       setBusy(false);
     }
@@ -439,13 +526,17 @@ export default function App() {
 
   async function toggleAccountActive(account: Account) {
     setBusy(true);
+    setMessage("");
     try {
       const nextActive = !account.is_active;
+      reportOperation("running", nextActive ? "启用账号" : "停用账号", `正在更新 @${account.username} 的状态…`);
       await api.updateAccount(account.id, { is_active: nextActive });
-      setMessage(`@${account.username} 已${nextActive ? "启用" : "停用"}`);
       await loadData();
+      reportOperation("success", nextActive ? "账号已启用" : "账号已停用", `@${account.username} 已${nextActive ? "重新加入" : "移出"}同步范围。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "更新账号状态失败");
+      const detail = errorDetail(error, "更新账号状态失败");
+      setMessage(detail);
+      reportOperation("error", "更新账号状态失败", detail);
     } finally {
       setBusy(false);
     }
@@ -513,6 +604,9 @@ export default function App() {
   async function importAccounts() {
     if (!importText.trim()) return;
     setBusy(true);
+    setMessage("");
+    const lineCount = importText.split(/\r?\n/).filter((line) => line.trim()).length;
+    reportOperation("running", "批量导入账号", `正在解析并导入 ${lineCount} 行账号数据…`);
     try {
       const result = await api.importAccounts({
         raw: importText,
@@ -521,12 +615,14 @@ export default function App() {
         employee: importEmployee,
         sync: importSync
       });
-      setMessage(`导入完成：新增 ${result.added}，更新 ${result.updated}，已加入同步队列 ${result.queued}`);
       setImportText("");
       await loadData();
       setView("dashboard");
+      reportOperation("success", "批量导入完成", `新增 ${result.added}，更新 ${result.updated}，已加入同步队列 ${result.queued}。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "批量导入失败");
+      const detail = errorDetail(error, "批量导入失败");
+      setMessage(detail);
+      reportOperation("error", "批量导入失败", detail);
     } finally {
       setBusy(false);
     }
@@ -535,13 +631,34 @@ export default function App() {
   async function markSelectedAlertsRead() {
     if (!selectedAlertIds.length) return;
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "标记告警已读", `正在处理 ${selectedAlertIds.length} 条所选告警…`);
     try {
       const result = await api.markAlertsRead(selectedAlertIds);
-      setMessage(`已标记 ${result.updated} 条告警为已读`);
       setSelectedAlertIds([]);
       await loadData();
+      reportOperation("success", "告警已处理", `已标记 ${result.updated} 条告警为已读。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "批量告警操作失败");
+      const detail = errorDetail(error, "批量告警操作失败");
+      setMessage(detail);
+      reportOperation("error", "批量告警操作失败", detail);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markAllAlertsRead() {
+    setBusy(true);
+    setMessage("");
+    reportOperation("running", "全部告警已读", `正在处理 ${stats?.unread_alerts || 0} 条未读告警…`);
+    try {
+      await api.markAllAlertsRead();
+      await loadData();
+      reportOperation("success", "全部告警已读", "所有未读告警已标记为已读。");
+    } catch (error) {
+      const detail = errorDetail(error, "全部告警操作失败");
+      setMessage(detail);
+      reportOperation("error", "全部告警操作失败", detail);
     } finally {
       setBusy(false);
     }
@@ -557,6 +674,8 @@ export default function App() {
   async function saveSettings() {
     if (!settings) return;
     setBusy(true);
+    setMessage("");
+    reportOperation("running", "保存设置", "正在保存安全可编辑的服务端配置…");
     try {
       const result = await api.updateSettings({
         monitor: settings.monitor,
@@ -567,9 +686,11 @@ export default function App() {
         notifications: { enabled: Boolean(settings.notifications?.enabled) }
       });
       setSettings(result.settings);
-      setMessage("设置已保存，将在下一次同步中生效。");
+      reportOperation("success", "设置已保存", "新设置将在下一次同步中生效。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "保存设置失败");
+      const detail = errorDetail(error, "保存设置失败");
+      setMessage(detail);
+      reportOperation("error", "保存设置失败", detail);
     } finally {
       setBusy(false);
     }
@@ -702,7 +823,7 @@ export default function App() {
                 返回总览
               </button>
             ) : null}
-            <button className="icon-button" title="刷新" disabled={busy} onClick={() => void loadData()}>
+            <button className="icon-button" title="刷新" disabled={busy} onClick={() => void loadData(api, { announce: true })}>
               <RefreshCcw aria-hidden="true" />
             </button>
             {view === "dashboard" ? (
@@ -714,7 +835,8 @@ export default function App() {
           </div>
         </header>
 
-        {message ? <div className="notice">{message}</div> : null}
+        {operation ? <OperationNotice operation={operation} /> : null}
+        {message ? <div className="notice notice-error">{message}</div> : null}
 
         {view === "dashboard" ? (
           <Dashboard
@@ -770,10 +892,7 @@ export default function App() {
             onDeleteAccount={(account) => void deleteAccount(account)}
             onOpenAccount={(id) => void openAccount(id)}
             onAlert={(alert) => void handleAlert(alert)}
-            onReadAll={async () => {
-              await api.markAllAlertsRead();
-              await loadData();
-            }}
+            onReadAll={() => markAllAlertsRead()}
           />
         ) : null}
         {view === "insights" ? (
@@ -806,10 +925,7 @@ export default function App() {
             }}
             onToggleAlert={(alertId, selected) => setSelectedAlertIds((current) => selected ? [...new Set([...current, alertId])] : current.filter((id) => id !== alertId))}
             onMarkSelected={() => void markSelectedAlertsRead()}
-            onReadAll={async () => {
-              await api.markAllAlertsRead();
-              await loadData();
-            }}
+            onReadAll={() => markAllAlertsRead()}
             onPage={setAlertPage}
             onAlert={(alert) => void handleAlert(alert)}
           />
@@ -855,9 +971,10 @@ export default function App() {
             logs={logs}
             auditLogs={auditLogs}
             backups={backups}
+            operation={operation}
             busy={busy}
             authenticated={authenticated}
-            onRefresh={() => void loadData()}
+            onRefresh={() => void loadData(api, { announce: true })}
             onSyncAll={() => void syncAll()}
             onCreateBackup={() => void createBackup()}
             onDownloadBackup={(name) => void downloadBackup(name)}
@@ -902,6 +1019,35 @@ export default function App() {
         {view === "settings" ? <SettingsPage settings={settings} busy={busy} onChange={updateSetting} onSave={() => void saveSettings()} /> : null}
       </section>
     </main>
+  );
+}
+
+function OperationNotice({ operation }: { operation: OperationState }) {
+  const icon = operation.status === "running"
+    ? <RefreshCcw aria-hidden="true" />
+    : operation.status === "success"
+      ? <CheckCircle2 aria-hidden="true" />
+      : <AlertTriangle aria-hidden="true" />;
+  const label = operation.status === "running" ? "进行中" : operation.status === "success" ? "已完成" : "失败";
+  return (
+    <section className={`operation-notice operation-${operation.status}`} aria-live="polite">
+      <div className="operation-icon">{icon}</div>
+      <div>
+        <strong>{operation.title}<span>{label}</span></strong>
+        <p>{operation.detail}</p>
+        <small>{operation.timestamp}</small>
+      </div>
+    </section>
+  );
+}
+
+function EmptyState({ title, detail, action }: { title: string; detail: string; action?: JSX.Element }) {
+  return (
+    <div className="empty-card">
+      <strong>{title}</strong>
+      <p>{detail}</p>
+      {action ? <div className="empty-actions">{action}</div> : null}
+    </div>
   );
 }
 
@@ -1195,6 +1341,13 @@ function Dashboard({
               </tbody>
             </table>
           </div>
+          {!accounts.length ? (
+            <EmptyState
+              title={accountsMeta.total ? "当前页没有账号" : "还没有可显示的账号"}
+              detail={accountsMeta.total ? "换一页或清除筛选后再查看。" : "可以在上方输入 TikTok 用户名/主页链接添加，也可以到“批量导入”一次导入多个账号。"}
+              action={<button className="ghost-light-button" onClick={clearAccountFilters}>清除筛选</button>}
+            />
+          ) : null}
           <PageControls meta={accountsMeta} page={accountPage} onPage={onAccountPage} />
         </section>
 
@@ -1222,7 +1375,12 @@ function Dashboard({
                 </button>
               </article>
             ))}
-            {!alerts.length ? <p className="empty-state">暂无符合条件的告警。</p> : null}
+            {!alerts.length ? (
+              <EmptyState
+                title="暂无符合条件的告警"
+                detail={unreadOnly || alertLevel ? "可以切换级别或取消“未读”筛选。" : "系统暂未发现异常；同步账号后会继续生成新的告警。"}
+              />
+            ) : null}
           </div>
           <PageControls meta={alertsMeta} page={alertPage} onPage={onAlertPage} />
         </section>
@@ -1231,6 +1389,12 @@ function Dashboard({
           <div className="panel-head"><h2>同步日志</h2><span>{logsMeta.total} 条</span></div>
           <div className="stack-list">
             {logs.map((log) => <article className="list-item" key={log.id}><strong>{log.username || "系统"}</strong><span>{log.message || log.status}</span><small>{formatDate(log.created_at)}</small></article>)}
+            {!logs.length ? (
+              <EmptyState
+                title="暂无同步日志"
+                detail="触发“全部同步”或单账号同步后，这里会显示同步结果、采集源和错误信息。"
+              />
+            ) : null}
           </div>
           <PageControls meta={logsMeta} page={logPage} onPage={onLogPage} />
         </section>
@@ -1240,6 +1404,12 @@ function Dashboard({
           <div className="provider-grid">
             {providers.map((provider) => <article className="provider-tile" key={provider.provider}><strong>{provider.provider}</strong><span>成功 {provider.success_count || 0}</span><span>失败 {provider.failure_count || 0}</span></article>)}
           </div>
+          {!providers.length ? (
+            <EmptyState
+              title="暂无采集源记录"
+              detail="完成一次同步后，系统会记录 provider 的成功、失败和延迟情况。"
+            />
+          ) : null}
         </section>
       </section>
     </>
@@ -1425,7 +1595,12 @@ function AlertsPage({
               </button>
             </article>
           ))}
-          {!alerts.length ? <p className="empty-state">暂无符合条件的告警。</p> : null}
+          {!alerts.length ? (
+            <EmptyState
+              title="暂无符合条件的告警"
+              detail={unreadOnly || alertLevel ? "可以切换级别或取消“只看未读”筛选。" : "系统暂未发现异常；同步账号后会继续生成新的告警。"}
+            />
+          ) : null}
         </div>
         <PageControls meta={meta} page={page} onPage={onPage} />
       </section>
@@ -1491,7 +1666,13 @@ function LogsPage({
           </tbody>
         </table>
       </div>
-      {!logs.length ? <p className="empty-state">暂无符合条件的同步日志。</p> : null}
+      {!logs.length ? (
+        <EmptyState
+          title="暂无符合条件的同步日志"
+          detail={filters.q || filters.status || filters.provider ? "可以清除筛选后查看全部同步记录。" : "触发同步后，这里会记录状态、采集源、更新视频数和失败原因。"}
+          action={(filters.q || filters.status || filters.provider) ? <button className="ghost-light-button" onClick={onClearFilters}>清除筛选</button> : undefined}
+        />
+      ) : null}
       <PageControls meta={meta} page={page} onPage={onPage} />
     </section>
   );
@@ -1565,7 +1746,13 @@ function AuditLogsPage({
           </tbody>
         </table>
       </div>
-      {!logs.length ? <p className="empty-state">暂无符合条件的审计日志。</p> : null}
+      {!logs.length ? (
+        <EmptyState
+          title="暂无符合条件的审计日志"
+          detail={filters.q || filters.action || filters.actor || filters.account_id ? "可以清除筛选后查看全部审计记录。" : "执行同步、导入、备份或告警处理后，这里会记录操作时间和详情。"}
+          action={(filters.q || filters.action || filters.actor || filters.account_id) ? <button className="ghost-light-button" onClick={onClearFilters}>清除筛选</button> : undefined}
+        />
+      ) : null}
       <PageControls meta={meta} page={page} onPage={onPage} />
     </section>
   );
@@ -1596,7 +1783,12 @@ function ProvidersPage({ providers }: { providers: ProviderHealth[] }) {
             </article>
           ))}
         </div>
-        {!providers.length ? <p className="empty-state">暂无采集源健康数据；完成同步后会开始记录。</p> : null}
+        {!providers.length ? (
+          <EmptyState
+            title="暂无采集源健康数据"
+            detail="完成一次同步后，系统会开始记录各采集源的成功率、连续失败和平均延迟。"
+          />
+        ) : null}
       </section>
     </section>
   );
@@ -1610,6 +1802,7 @@ function OperationsPage({
   logs,
   auditLogs,
   backups,
+  operation,
   busy,
   authenticated,
   onRefresh,
@@ -1624,6 +1817,7 @@ function OperationsPage({
   logs: SyncLog[];
   auditLogs: AuditLog[];
   backups: BackupList | null;
+  operation: OperationState | null;
   busy: boolean;
   authenticated: boolean;
   onRefresh: () => void;
@@ -1651,6 +1845,11 @@ function OperationsPage({
         <div>
           <h2>运维快捷操作</h2>
           <p>这里聚合日常维护最常用的动作：刷新状态、触发同步、创建备份和下载最新备份。</p>
+          {operation ? (
+            <small className={`operation-inline operation-${operation.status}`}>
+              {operation.status === "running" ? "当前操作" : "最近结果"}：{operation.title} · {operation.detail}
+            </small>
+          ) : null}
         </div>
         <div className="operations-actions">
           <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onRefresh}>
@@ -1730,7 +1929,12 @@ function OperationsPage({
                 <small>最近失败：{formatDate(provider.last_failure_at || provider.last_failure)}</small>
               </article>
             ))}
-            {!providers.length ? <p className="empty-state">暂无采集源数据。</p> : null}
+            {!providers.length ? (
+              <EmptyState
+                title="暂无采集源数据"
+                detail="完成同步后，这里会优先展示失败或需要关注的 provider。"
+              />
+            ) : null}
           </div>
         </section>
       </section>
@@ -1756,7 +1960,12 @@ function OperationsPage({
             </tbody>
           </table>
         </div>
-        {!logs.length ? <p className="empty-state">暂无同步日志。</p> : null}
+        {!logs.length ? (
+          <EmptyState
+            title="暂无同步日志"
+            detail="触发同步后，这里会显示最近的同步状态、采集源和错误信息。"
+          />
+        ) : null}
       </section>
 
       <section className="panel">
@@ -1772,7 +1981,12 @@ function OperationsPage({
               <small>{formatDate(log.created_at)} · {log.actor || "system"}{log.account_username ? ` · @${log.account_username}` : ""}</small>
             </article>
           ))}
-          {!auditLogs.length ? <p className="empty-state">暂无审计日志。</p> : null}
+          {!auditLogs.length ? (
+            <EmptyState
+              title="暂无审计日志"
+              detail="执行同步、导入、备份或告警处理后，这里会显示最近操作记录。"
+            />
+          ) : null}
         </div>
       </section>
     </section>
@@ -1846,7 +2060,13 @@ function BackupsPage({
             </tbody>
           </table>
         </div>
-        {!items.length ? <p className="empty-state">暂无备份。点击“创建备份”后会生成一个可下载的 SQLite 数据库快照。</p> : null}
+        {!items.length ? (
+          <EmptyState
+            title="暂无备份"
+            detail="点击“创建备份”后会生成一个可下载的 SQLite 数据库快照；部署前建议先做一次手动备份。"
+            action={<button className="ghost-light-button" disabled={busy || !authenticated} onClick={onCreate}>创建备份</button>}
+          />
+        ) : null}
       </section>
     </section>
   );
@@ -1951,11 +2171,26 @@ function AccountPage({ account, busy, onSync, onVideo, onVideoPage, onLogPage }:
       <div className="table-wrap"><table><thead><tr><th>标题</th><th>播放</th><th>点赞</th><th>评论</th><th>发布时间</th></tr></thead><tbody>
         {videos.map((video) => <tr key={video.id}><td><button className="link-button" onClick={() => onVideo(video.id)}>{video.title || "无标题视频"}</button></td><td>{compactNumber(video.play_count)}</td><td>{compactNumber(video.like_count)}</td><td>{compactNumber(video.comment_count)}</td><td>{formatDate(video.published_at)}</td></tr>)}
       </tbody></table></div>
+      {!videos.length ? (
+        <EmptyState
+          title="暂无视频记录"
+          detail="点击“同步账号”后，系统会采集该账号的视频列表和播放数据。"
+          action={<button className="ghost-light-button" disabled={busy} onClick={onSync}>同步账号</button>}
+        />
+      ) : null}
       <PageControls meta={account.videos_meta || EMPTY_PAGE_META} page={account.videos_meta?.page || 1} onPage={onVideoPage} />
     </section>
     <section className="panel">
       <div className="panel-head"><h2>最近同步记录</h2><span>{account.logs.length} 条</span></div>
-      <div className="stack-list">{account.logs.map((log) => <article className="list-item" key={log.id}><strong>{log.status}</strong><span>{log.message || "同步完成"}</span><small>{formatDate(log.created_at)} · 更新 {log.videos_updated} 个视频</small></article>)}</div>
+      <div className="stack-list">
+        {account.logs.map((log) => <article className="list-item" key={log.id}><strong>{log.status}</strong><span>{log.message || "同步完成"}</span><small>{formatDate(log.created_at)} · 更新 {log.videos_updated} 个视频</small></article>)}
+        {!account.logs.length ? (
+          <EmptyState
+            title="暂无同步记录"
+            detail="同步该账号后，这里会显示最近同步时间、更新视频数量和失败原因。"
+          />
+        ) : null}
+      </div>
       <PageControls meta={account.logs_meta || EMPTY_PAGE_META} page={account.logs_meta?.page || 1} onPage={onLogPage} />
     </section>
   </section>;

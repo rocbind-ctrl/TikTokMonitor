@@ -1,28 +1,38 @@
 # Next Tasks
 
-Updated: 2026-07-11
+Updated: 2026-07-13
 
 ## Immediate Tasks
 
-1. Review, commit, and push the Docker deployment and backup workflow updates.
+1. Finish 0.2.9: validate and publish desktop operation feedback.
+   - Run TypeScript and production desktop build checks.
+   - Commit and publish the 0.2.9 changes after validation.
+   - Deploy only if server-facing changes are added; current 0.2.9 scope is
+     desktop-only.
 
-2. Prepare the first cloud server.
-   - Recommended baseline: Ubuntu 22.04/24.04 LTS, 2 CPU, 2-4 GB RAM,
-     30+ GB disk.
-   - Install Docker and Docker Compose.
-   - Follow `docs/CLOUD_DEPLOYMENT.md`.
+2. Prepare 0.2.10: account/video productivity gaps.
+   - Add richer table actions for accounts and videos.
+   - Improve account detail navigation and cross-links between account, videos,
+     alerts, logs, and audit records.
+   - Add safer bulk-action summaries before applying changes.
 
-3. Deploy the server with a host-local `server/config.yaml`.
-   - Keep production `security.web_password` and `security.api_key` outside
-     Git and outside the Docker image.
+3. Prepare 0.2.11: data quality and health checks.
+   - Surface stale accounts, failed providers, recent sync failures, and missing
+     metrics as operator-facing health cards.
+   - Add filters for stale/no-video/no-recent-post accounts.
+   - Add tests for the new health/status responses.
 
-4. Configure remote access.
-   - Internal testing can use port `8099`.
-   - Team use should prefer HTTPS reverse proxy, VPN, or fixed-IP allowlists.
+4. Keep release operations repeatable.
+   - Update docs after each version.
+   - Verify GitHub Actions before deployment.
+   - Create a server backup before every deployment.
+   - Smoke-test the deployed API and desktop-critical flows after deployment.
 
-5. Schedule regular backups.
-   - Use `server/scripts/sqlite_backup.py backup --keep-days 30`.
-   - Run a restore drill before relying on the server for team data.
+5. Plan the database migration path.
+   - SQLite remains acceptable for early use.
+   - PostgreSQL should be planned before multiple operators rely on the system
+     every day.
+   - Document the migration sequence before changing production data storage.
 
 ## Completed Since Last Update
 
@@ -48,12 +58,26 @@ Updated: 2026-07-11
   restore, update, and rollback.
 - Added a team usage guide for Web, desktop, server operations, backup,
   restore, and troubleshooting.
+- Deployed the central Docker server and verified the online API.
+- Published desktop builds through GitHub Actions.
+- Added desktop saved filters and CSV export workflows.
+- Added richer dashboard analytics and anomaly views.
+- Added desktop operations center, provider health, backup management, sync
+  logs, and audit logs.
+- Added V2 backup and audit APIs with tests.
+- Released 0.2.6, 0.2.7, and 0.2.8.
+- Implemented 0.2.9 desktop operation feedback and clearer empty states in the
+  working tree.
 
 ## Follow-up Product Tasks
 
-1. Add saved filters and export workflows to the desktop client.
+1. Improve desktop operation feedback and task visibility.
 
-2. Add richer dashboard analytics and anomaly views to the desktop client.
+2. Close remaining account/video productivity gaps from the recovered replica.
+
+3. Add operator health views for stale data, provider failures, and failed syncs.
+
+4. Improve docs and in-app guidance for non-technical team users.
 
 ## Engineering Tasks
 
@@ -67,7 +91,7 @@ Updated: 2026-07-11
 
 ## Current Local Artifacts
 
-- Windows ARM64 installer:
-  `release/TikTokMonitor_Desktop_Windows_ARM64.msi`
+- Windows 0.2.8 installer:
+  `release/tiktokmonitor-windows-0.2.8-audit-logs/msi/TikTokMonitor_0.2.8_x64_en-US.msi`
 
-This file is intentionally ignored by Git.
+Release artifacts are intentionally ignored by Git.

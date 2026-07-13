@@ -1,23 +1,25 @@
 # TikTokMonitor Cross-Platform Migration Progress
 
-Updated: 2026-07-11
+Updated: 2026-07-13
 
 ## Current Status
 
-The migration scaffold is complete. The recovered Windows replica source is
-preserved under `replica_src/`, and the new cross-platform structure now exists
-beside it.
+The cross-platform migration has moved from scaffold to usable release. The
+central Docker server is deployed, the Tauri desktop client is published through
+GitHub Actions, and the 0.2.x product work is now focused on closing feature
+gaps with the recovered Windows replica while keeping the new server/client
+architecture.
 
-Latest local commit:
+Latest published release commit:
 
 ```text
-80ddce2 Document migration progress and next tasks
+ded82ec Release 0.2.8 audit logs
 ```
 
 GitHub remote:
 
 ```text
-Not configured yet
+https://github.com/netwebqi/TikTokMonitor
 ```
 
 ## Completed
@@ -51,13 +53,30 @@ Not configured yet
 - Migrated the desktop client's current API calls to `/api/v2/*`.
 - Added desktop pagination controls, native SVG trend charts, and filtered/bulk
   alert workflows.
+- Published the repository to GitHub and verified cloud CI for server checks and
+  desktop builds.
+- Added Docker deployment, backup/restore tooling, deployment guide, and Chinese
+  team usage guide.
+- Deployed the central server to the first cloud host and verified online
+  operation.
+- Added desktop saved account filters and CSV export workflows.
+- Added desktop data insights, operations center, provider health, backup
+  management, sync logs, and audit logs.
+- Added V2 backup and audit APIs with isolated test coverage.
+- Released 0.2.6, 0.2.7, and 0.2.8 through GitHub Actions.
+- Started 0.2.9 desktop usability work for operation feedback, persistent
+  operation results, and clearer empty states.
 
 ## Pending
 
-- Publish the local repository to GitHub through GitHub Desktop.
-- Let GitHub Actions build cloud artifacts for Windows, macOS, and Linux.
-- Continue product work such as saved filters and export workflows in the
-  Tauri client.
+- Continue 0.2.x product work against the recovered replica feature set.
+- Validate and publish 0.2.9 after desktop operation-feedback checks pass.
+- Improve desktop navigation and feature discoverability beyond the 0.2.9
+  feedback pass.
+- Add safer operator workflows for long-running sync/import/export tasks.
+- Keep deployment and release notes synchronized after each published version.
+- Plan the database migration path before the system becomes daily team
+  infrastructure.
 
 ## Notes
 
@@ -65,5 +84,5 @@ Not configured yet
   databases must stay out of Git.
 - The recommended team deployment model remains: run one central server, then
   let Windows/macOS desktop clients connect to it through HTTP APIs.
-- A local Windows ARM64 MSI was generated outside Git in the build target
-  directory and copied to the ignored `release/` directory for convenience.
+- Release installers and downloaded GitHub Actions artifacts are intentionally
+  kept in the ignored `release/` directory.
