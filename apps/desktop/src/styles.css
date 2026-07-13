@@ -410,6 +410,14 @@ h2 {
   min-width: 680px;
 }
 
+.backup-table {
+  min-width: 760px;
+}
+
+.backup-table td:first-child {
+  word-break: break-all;
+}
+
 .account-filter-grid {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) repeat(6, minmax(120px, 150px)) auto;

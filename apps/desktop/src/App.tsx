@@ -22,6 +22,7 @@ import {
   AccountUpdate,
   Alert,
   AccountFilters,
+  BackupList,
   createApiClient,
   DashboardData,
   Health,
@@ -37,13 +38,21 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "import" | "settings";
+type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "backups" | "import" | "settings";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
 
 function compactNumber(value: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { notation: "compact" }).format(value || 0);
+}
+
+function formatBytes(value: number | undefined) {
+  const bytes = value || 0;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
 }
 
 function formatDate(value: string | null | undefined) {
@@ -85,6 +94,7 @@ export default function App() {
   const [alertPage, setAlertPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
+  const [backups, setBackups] = useState<BackupList | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [accountDetail, setAccountDetail] = useState<AccountDetail | null>(null);
   const [videoDetail, setVideoDetail] = useState<Video | null>(null);
@@ -138,18 +148,20 @@ export default function App() {
         setAlertsMeta(EMPTY_PAGE_META);
         setLogsMeta(EMPTY_PAGE_META);
         setProviders([]);
+        setBackups(null);
         setSelectedAlertIds([]);
         return;
       }
 
-      const [nextDashboard, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders] = await Promise.all([
+      const [nextDashboard, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextProviders, nextBackups] = await Promise.all([
         client.dashboard(),
         client.insights(),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
         client.logs(logPage, 30, logFilters),
-        client.providers()
+        client.providers(),
+        client.backups()
       ]);
       setDashboard(nextDashboard);
       setInsights(nextInsights);
@@ -161,6 +173,7 @@ export default function App() {
       setAlertsMeta(nextAlerts.meta);
       setLogsMeta(nextLogs.meta);
       setProviders(nextProviders);
+      setBackups(nextBackups);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "连接失败";
       setMessage(
@@ -248,8 +261,7 @@ export default function App() {
     persistSavedAccountFilters(savedAccountFilters.filter((item) => item.id !== filterId));
   }
 
-  function downloadTextFile(filename: string, content: string, type = "text/csv;charset=utf-8") {
-    const blob = new Blob([content], { type });
+  function downloadBlobFile(filename: string, blob: Blob) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -258,6 +270,10 @@ export default function App() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadTextFile(filename: string, content: string, type = "text/csv;charset=utf-8") {
+    downloadBlobFile(filename, new Blob([content], { type }));
   }
 
   async function exportAccountsCsv() {
@@ -281,6 +297,32 @@ export default function App() {
       setMessage("视频 CSV 已导出");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "导出视频失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createBackup() {
+    setBusy(true);
+    try {
+      await api.createBackup(30);
+      setBackups(await api.backups());
+      setMessage("备份已创建，可在备份管理中下载。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "创建备份失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadBackup(name: string) {
+    setBusy(true);
+    try {
+      const content = await api.downloadBackup(name);
+      downloadBlobFile(name, new Blob([content], { type: "application/octet-stream" }));
+      setMessage(`备份已开始下载：${name}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "下载备份失败");
     } finally {
       setBusy(false);
     }
@@ -526,6 +568,7 @@ export default function App() {
     alerts: ["告警中心", "集中处理未读告警、异常提示和关联账号。"],
     logs: ["同步日志", "按状态、采集源和关键词排查同步任务。"],
     providers: ["采集源健康", "查看 provider 成功率、延迟和最近失败情况。"],
+    backups: ["备份管理", "查看、创建和下载服务器数据库备份。"],
     import: ["批量导入账号", "每行一个账号，可附带分组、手机和员工。"],
     settings: ["设置", "仅显示可安全编辑的服务端配置。"]
   };
@@ -599,6 +642,10 @@ export default function App() {
           <button className={view === "providers" ? "active" : ""} disabled={!authenticated} onClick={() => setView("providers")}>
             <Server aria-hidden="true" />
             采集源
+          </button>
+          <button className={view === "backups" ? "active" : ""} disabled={!authenticated} onClick={() => setView("backups")}>
+            <FileUp aria-hidden="true" />
+            备份管理
           </button>
           <button className={view === "import" ? "active" : ""} disabled={!authenticated} onClick={() => setView("import")}>
             <FileUp aria-hidden="true" />
@@ -758,6 +805,15 @@ export default function App() {
         ) : null}
         {view === "providers" ? (
           <ProvidersPage providers={providers} />
+        ) : null}
+        {view === "backups" ? (
+          <BackupsPage
+            backups={backups}
+            busy={busy}
+            authenticated={authenticated}
+            onCreate={() => void createBackup()}
+            onDownload={(name) => void downloadBackup(name)}
+          />
         ) : null}
         {view === "account" && accountDetail ? (
           <AccountPage
@@ -1410,6 +1466,79 @@ function ProvidersPage({ providers }: { providers: ProviderHealth[] }) {
           ))}
         </div>
         {!providers.length ? <p className="empty-state">暂无采集源健康数据；完成同步后会开始记录。</p> : null}
+      </section>
+    </section>
+  );
+}
+
+function BackupsPage({
+  backups,
+  busy,
+  authenticated,
+  onCreate,
+  onDownload
+}: {
+  backups: BackupList | null;
+  busy: boolean;
+  authenticated: boolean;
+  onCreate: () => void;
+  onDownload: (name: string) => void;
+}) {
+  const items = backups?.items || [];
+  const latest = items[0];
+  const totalMegabytes = Math.round((backups?.total_size || 0) / 1024 / 1024);
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<FileUp />} label="备份数量" value={backups?.total || 0} detail="服务器当前可下载备份" />
+        <Metric icon={<Server />} label="占用(MB)" value={totalMegabytes} detail={formatBytes(backups?.total_size)} />
+        <Metric icon={<CheckCircle2 />} label="最新备份" value={latest ? 1 : 0} detail={latest ? formatDate(latest.modified_at) : "暂无备份"} />
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>数据库备份</h2>
+            <span>只提供创建和下载，不提供恢复入口，避免误覆盖线上数据。</span>
+          </div>
+          <button className="primary-button" disabled={busy || !authenticated} onClick={onCreate}>
+            <FileUp aria-hidden="true" />
+            创建备份
+          </button>
+        </div>
+
+        <div className="table-wrap">
+          <table className="backup-table">
+            <thead>
+              <tr>
+                <th>文件名</th>
+                <th>大小</th>
+                <th>创建时间</th>
+                <th>更新时间</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((backup) => (
+                <tr key={backup.name}>
+                  <td>
+                    <strong>{backup.name}</strong>
+                    <small>{backup.download_url}</small>
+                  </td>
+                  <td>{formatBytes(backup.size)}</td>
+                  <td>{formatDate(backup.created_at)}</td>
+                  <td>{formatDate(backup.modified_at)}</td>
+                  <td>
+                    <button className="ghost-light-button" disabled={busy || !authenticated} onClick={() => onDownload(backup.name)}>
+                      下载
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!items.length ? <p className="empty-state">暂无备份。点击“创建备份”后会生成一个可下载的 SQLite 数据库快照。</p> : null}
       </section>
     </section>
   );

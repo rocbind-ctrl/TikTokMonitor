@@ -347,6 +347,20 @@ export interface LoginResult {
   session_token?: string;
 }
 
+export interface BackupItem {
+  name: string;
+  size: number;
+  created_at: string;
+  modified_at: string;
+  download_url: string;
+}
+
+export interface BackupList {
+  items: BackupItem[];
+  total: number;
+  total_size: number;
+}
+
 interface ApiEnvelope<T> {
   ok: boolean;
   data: T;
@@ -457,6 +471,28 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     return response.text();
   }
 
+  async function requestBytes(path: string, init: RequestInit = {}): Promise<ArrayBuffer> {
+    const url = `${normalizedBase}${path}`;
+    let response: Response;
+    try {
+      response = await requestFetch(url, {
+        credentials: "include",
+        headers: {
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          ...(init.headers || {})
+        },
+        ...init
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error || "未知错误");
+      throw new Error(`连接失败：${url}。底层错误：${detail}`);
+    }
+    if (!response.ok) {
+      throw new ApiError(`${response.status} ${response.statusText}`, { status: response.status });
+    }
+    return response.arrayBuffer();
+  }
+
   async function requestPage<T>(path: string, init: RequestInit = {}): Promise<Paginated<T>> {
     const response = await requestEnvelope<T[]>(path, init);
     if (!response.meta) {
@@ -489,6 +525,11 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
       const suffix = accountId ? `?account_id=${accountId}` : "";
       return requestText(`/api/v2/export/videos.csv${suffix}`, { method: "GET" });
     },
+    backups: () => request<BackupList>("/api/v2/backups", { method: "GET" }),
+    createBackup: (keepDays = 30) =>
+      request<BackupItem>(`/api/v2/backups?keep_days=${keepDays}`, { method: "POST" }),
+    downloadBackup: (name: string) =>
+      requestBytes(`/api/v2/backups/${encodeURIComponent(name)}`, { method: "GET" }),
     accounts: (page = 1, perPage = 50, filters: AccountFilters = {}) => {
       const params = new URLSearchParams({
         page: String(page),

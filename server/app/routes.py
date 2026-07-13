@@ -1,14 +1,17 @@
 from datetime import datetime, timezone, timedelta
+from contextlib import closing
+from pathlib import Path
 from urllib.parse import quote
 import asyncio
 import json
+import sqlite3
 
 import yaml
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, func
@@ -54,10 +57,11 @@ from app.sync_progress import get_progress
 from app.sync_service import enqueue_account_sync, pending_sync_count, sync_account, sync_all_accounts
 from app.sync_tracker import syncing_ids
 from app.system_status import system_overview
-from app.paths import CONFIG_PATH, STATIC_DIR, TEMPLATES_DIR
+from app.paths import APP_DIR, CONFIG_PATH, DB_PATH, STATIC_DIR, TEMPLATES_DIR
 from app.utils import apply_parsed_tags, normalize_username, parse_batch_line
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+BACKUP_DIR = APP_DIR / "backups"
 
 
 def _compact_num(value: int) -> str:
@@ -465,6 +469,50 @@ def _csv_response(content: str, filename: str) -> Response:
     )
 
 
+def _backup_payload(path: Path) -> dict:
+    stat = path.stat()
+    return {
+        "name": path.name,
+        "size": stat.st_size,
+        "created_at": _iso(datetime.fromtimestamp(stat.st_ctime, timezone.utc)),
+        "modified_at": _iso(datetime.fromtimestamp(stat.st_mtime, timezone.utc)),
+        "download_url": f"/api/v2/backups/{quote(path.name)}",
+    }
+
+
+def _list_backup_files() -> list[Path]:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    return sorted(BACKUP_DIR.glob("monitor_*.db"), key=lambda path: path.stat().st_mtime, reverse=True)
+
+
+def _resolve_backup_file(filename: str) -> Path | None:
+    if not filename or Path(filename).name != filename or not filename.startswith("monitor_") or not filename.endswith(".db"):
+        return None
+    path = (BACKUP_DIR / filename).resolve()
+    try:
+        path.relative_to(BACKUP_DIR.resolve())
+    except ValueError:
+        return None
+    return path if path.exists() and path.is_file() else None
+
+
+def _create_sqlite_backup(keep_days: int | None = 30) -> Path:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    if not DB_PATH.exists():
+        raise FileNotFoundError(f"Database not found: {DB_PATH}")
+    target = BACKUP_DIR / f"monitor_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_utc')}.db"
+    with closing(sqlite3.connect(f"{DB_PATH.resolve().as_uri()}?mode=ro", uri=True)) as source:
+        with closing(sqlite3.connect(target)) as dest:
+            source.backup(dest)
+    if keep_days is not None and keep_days >= 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=keep_days)
+        for path in BACKUP_DIR.glob("monitor_*.db"):
+            modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            if modified < cutoff:
+                path.unlink()
+    return target
+
+
 @app.exception_handler(RequestValidationError)
 async def request_validation_error(request: Request, exc: RequestValidationError):
     if request.url.path.startswith("/api/v2/"):
@@ -811,6 +859,41 @@ def api_v2_export_videos(account_id: int | None = None, db: Session = Depends(ge
     content = export_videos_csv(db, account_id=account_id)
     suffix = f"account_{account_id}" if account_id else "all"
     return _csv_response(content, f"videos_{suffix}.csv")
+
+
+@app.get("/api/v2/backups")
+def api_v2_list_backups():
+    backups = [_backup_payload(path) for path in _list_backup_files()]
+    total_size = sum(item["size"] for item in backups)
+    return _v2_success(
+        {
+            "items": backups,
+            "total": len(backups),
+            "total_size": total_size,
+        }
+    )
+
+
+@app.post("/api/v2/backups")
+def api_v2_create_backup(keep_days: int = 30):
+    keep_days = min(365, max(0, keep_days))
+    try:
+        path = _create_sqlite_backup(keep_days=keep_days)
+    except FileNotFoundError as exc:
+        return _v2_error("database_not_found", str(exc), status_code=404)
+    return _v2_success(_backup_payload(path), status_code=201)
+
+
+@app.get("/api/v2/backups/{filename}")
+def api_v2_download_backup(filename: str):
+    path = _resolve_backup_file(filename)
+    if not path:
+        return _v2_error("backup_not_found", "Backup not found", status_code=404)
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=path.name,
+    )
 
 
 @app.get("/api/v2/accounts")

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from contextlib import closing
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import sqlite3
+import tempfile
 import unittest
 
 from fastapi.testclient import TestClient
@@ -273,6 +276,46 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.json()["data"]["phone"], "Phone B")
         self.assertEqual(second.json()["data"]["employee"], "Bob")
+
+    def test_v2_backup_list_create_and_download(self):
+        self.login()
+        original_db_path = routes.DB_PATH
+        original_backup_dir = routes.BACKUP_DIR
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path
+
+            root = Path(tmp)
+            db_path = root / "monitor.db"
+            backup_dir = root / "backups"
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, name TEXT)")
+                conn.execute("INSERT INTO sample (name) VALUES ('backup-ok')")
+                conn.commit()
+            routes.DB_PATH = db_path
+            routes.BACKUP_DIR = backup_dir
+            try:
+                created = self.client.post("/api/v2/backups?keep_days=30")
+                self.assertEqual(created.status_code, 201)
+                created_body = created.json()
+                self.assertTrue(created_body["ok"])
+                filename = created_body["data"]["name"]
+                self.assertTrue(filename.startswith("monitor_"))
+                self.assertGreater(created_body["data"]["size"], 0)
+
+                listed = self.client.get("/api/v2/backups")
+                self.assertEqual(listed.status_code, 200)
+                self.assertEqual(listed.json()["data"]["total"], 1)
+                self.assertEqual(listed.json()["data"]["items"][0]["name"], filename)
+
+                downloaded = self.client.get(f"/api/v2/backups/{filename}")
+                self.assertEqual(downloaded.status_code, 200)
+                self.assertGreater(len(downloaded.content), 0)
+
+                rejected = self.client.get("/api/v2/backups/../monitor.db")
+                self.assertEqual(rejected.status_code, 404)
+            finally:
+                routes.DB_PATH = original_db_path
+                routes.BACKUP_DIR = original_backup_dir
 
     def test_v2_insights_returns_trend_rankings_anomalies_and_gainers(self):
         self.login()
