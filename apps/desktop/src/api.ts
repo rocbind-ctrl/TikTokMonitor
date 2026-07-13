@@ -255,6 +255,15 @@ export interface SyncProgress {
   queue_size?: number;
 }
 
+export interface SyncQueueResult {
+  status: string;
+  message: string;
+  queued?: number;
+  queue_size?: number;
+  account_id?: number;
+  account_ids?: number[];
+}
+
 export interface DashboardData {
   today: DashboardToday;
   filter_totals: DashboardTotals;
@@ -644,9 +653,9 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
       return requestPage<AuditLog>(`/api/v2/audit/logs?${params.toString()}`, { method: "GET" });
     },
     providers: () => request<ProviderHealth[]>("/api/v2/providers/health", { method: "GET" }),
-    syncAll: () => request<{ status: string; message: string }>("/api/v2/sync/all", { method: "POST" }),
+    syncAll: () => request<SyncQueueResult>("/api/v2/sync/all", { method: "POST" }),
     syncAccount: (accountId: number) =>
-      request<{ status: string; message: string }>(`/api/v2/accounts/${accountId}/sync`, {
+      request<SyncQueueResult>(`/api/v2/accounts/${accountId}/sync`, {
         method: "POST"
       }),
     markAlertRead: (alertId: number) =>

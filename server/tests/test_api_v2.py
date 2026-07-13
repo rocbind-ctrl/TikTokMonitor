@@ -142,11 +142,15 @@ class ApiV2TestCase(unittest.TestCase):
 
         synced = self.client.post(f"/api/v2/accounts/{first_id}/sync")
         self.assertEqual(synced.status_code, 200)
+        self.assertEqual(synced.json()["data"]["queued"], 1)
+        self.assertEqual(synced.json()["data"]["account_ids"], [first_id])
+        self.assertIn("queue_size", synced.json()["data"])
         self.assertEqual(self.enqueued, [first_id])
 
         sync_all = self.client.post("/api/v2/sync/all")
         self.assertEqual(sync_all.status_code, 200)
         self.assertEqual(sync_all.json()["data"]["queued"], 3)
+        self.assertIn("queue_size", sync_all.json()["data"])
         self.assertEqual(len(self.enqueued), 4)
 
         deleted = self.client.delete(f"/api/v2/accounts/{first_id}")

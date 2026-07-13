@@ -1355,7 +1355,14 @@ def api_v2_sync_account(account_id: int, db: Session = Depends(get_db)):
     log_action(db, "sync_account", f"@{account.username} queued for sync", account_id=account.id)
     db.commit()
     return _v2_success(
-        {"status": "success", "account_id": account_id, "message": f"@{account.username} queued for sync"}
+        {
+            "status": "success",
+            "queued": 1,
+            "queue_size": pending_sync_count(),
+            "account_id": account_id,
+            "account_ids": [account_id],
+            "message": f"@{account.username} queued for sync",
+        }
     )
 
 
@@ -1370,6 +1377,7 @@ def api_v2_sync_all(db: Session = Depends(get_db)):
         {
             "status": "success",
             "queued": len(ids),
+            "queue_size": pending_sync_count(),
             "account_ids": ids,
             "message": f"{len(ids)} accounts queued for sync",
         }

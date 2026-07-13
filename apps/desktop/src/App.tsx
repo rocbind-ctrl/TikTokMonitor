@@ -51,9 +51,12 @@ type OperationState = {
   title: string;
   detail: string;
   timestamp: string;
+  key?: string;
+  durationMs?: number;
 };
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
+const OPERATION_HISTORY_KEY = "tiktokmonitor.operationHistory";
 
 function compactNumber(value: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { notation: "compact" }).format(value || 0);
@@ -98,6 +101,12 @@ function operationTime() {
     minute: "2-digit",
     second: "2-digit"
   }).format(new Date());
+}
+
+function formatDuration(value: number | undefined) {
+  if (!value) return "";
+  const seconds = Math.max(1, Math.round(value / 1000));
+  return seconds >= 60 ? `${Math.floor(seconds / 60)}分${seconds % 60}秒` : `${seconds}秒`;
 }
 
 function errorDetail(error: unknown, fallback: string) {
@@ -161,19 +170,53 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [operation, setOperation] = useState<OperationState | null>(null);
+  const [activeOperationKey, setActiveOperationKey] = useState("");
+  const [operationHistory, setOperationHistory] = useState<OperationState[]>(() => {
+    try {
+      const raw = localStorage.getItem(OPERATION_HISTORY_KEY);
+      return raw ? JSON.parse(raw) as OperationState[] : [];
+    } catch {
+      return [];
+    }
+  });
 
   const api = useMemo(() => createApiClient(serverUrl, sessionToken), [serverUrl, sessionToken]);
   const authenticated = session ? session.authenticated || !session.auth_enabled : false;
 
-  function reportOperation(status: OperationState["status"], title: string, detail: string) {
-    setOperation({ status, title, detail, timestamp: operationTime() });
+  function reportOperation(
+    status: OperationState["status"],
+    title: string,
+    detail: string,
+    options: { key?: string; startedAt?: number } = {}
+  ) {
+    const next: OperationState = {
+      status,
+      title,
+      detail,
+      timestamp: operationTime(),
+      key: options.key,
+      durationMs: options.startedAt ? Date.now() - options.startedAt : undefined
+    };
+    setOperation(next);
+    if (options.key) {
+      setActiveOperationKey((current) => status === "running" ? options.key || current : current === options.key ? "" : current);
+    }
+    setOperationHistory((current) => {
+      const deduped = options.key && status === "running"
+        ? current.filter((item) => !(item.key === options.key && item.status === "running"))
+        : current;
+      const nextHistory = [next, ...deduped].slice(0, 10);
+      localStorage.setItem(OPERATION_HISTORY_KEY, JSON.stringify(nextHistory));
+      return nextHistory;
+    });
   }
 
   const loadData = useCallback(async (client = api, options: { announce?: boolean } = {}) => {
     setBusy(true);
+    const startedAt = Date.now();
     if (options.announce) {
       setMessage("");
-      setOperation({ status: "running", title: "刷新数据", detail: "正在从服务器读取最新账号、日志和运维状态…", timestamp: operationTime() });
+      reportOperation("running", "刷新数据", "正在从服务器读取最新账号、日志和运维状态…", { key: "refresh" });
     }
     try {
       const [nextSession, nextHealth] = await Promise.all([
@@ -230,12 +273,12 @@ export default function App() {
       setProviders(nextProviders);
       setBackups(nextBackups);
       if (options.announce) {
-        setOperation({
-          status: "success",
-          title: "刷新完成",
-          detail: `已更新 ${nextAccounts.meta.total} 个账号、${nextAlerts.meta.total} 条告警、${nextLogs.meta.total} 条同步日志。`,
-          timestamp: operationTime()
-        });
+        reportOperation(
+          "success",
+          "刷新完成",
+          `已更新 ${nextAccounts.meta.total} 个账号、${nextAlerts.meta.total} 条告警、${nextLogs.meta.total} 条同步日志。`,
+          { key: "refresh", startedAt }
+        );
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "连接失败";
@@ -247,7 +290,7 @@ export default function App() {
         nextMessage
       );
       if (options.announce) {
-        setOperation({ status: "error", title: "刷新失败", detail: nextMessage, timestamp: operationTime() });
+        reportOperation("error", "刷新失败", nextMessage, { key: "refresh", startedAt });
       }
     } finally {
       setBusy(false);
@@ -398,16 +441,17 @@ export default function App() {
   async function exportAccountsCsv() {
     setBusy(true);
     setMessage("");
+    const startedAt = Date.now();
     const filename = `accounts_${new Date().toISOString().slice(0, 10)}.csv`;
-    reportOperation("running", "导出账号 CSV", `正在按当前筛选导出 ${accountsMeta.total} 个账号…`);
+    reportOperation("running", "导出账号 CSV", `正在按当前筛选导出 ${accountsMeta.total} 个账号…`, { key: "export-accounts" });
     try {
       const csv = await api.exportAccountsCsv(accountFilters);
       downloadTextFile(filename, csv);
-      reportOperation("success", "账号 CSV 已导出", `文件已交给系统下载：${filename}`);
+      reportOperation("success", "账号 CSV 已导出", `文件已交给系统下载：${filename} · ${accountsMeta.total} 个账号`, { key: "export-accounts", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "导出账号失败");
       setMessage(detail);
-      reportOperation("error", "导出账号失败", detail);
+      reportOperation("error", "导出账号失败", detail, { key: "export-accounts", startedAt });
     } finally {
       setBusy(false);
     }
@@ -416,16 +460,17 @@ export default function App() {
   async function exportVideosCsv() {
     setBusy(true);
     setMessage("");
+    const startedAt = Date.now();
     const filename = `videos_${new Date().toISOString().slice(0, 10)}.csv`;
-    reportOperation("running", "导出视频 CSV", `正在导出 ${stats?.total_videos || 0} 条视频记录…`);
+    reportOperation("running", "导出视频 CSV", `正在导出 ${stats?.total_videos || 0} 条视频记录…`, { key: "export-videos" });
     try {
       const csv = await api.exportVideosCsv();
       downloadTextFile(filename, csv);
-      reportOperation("success", "视频 CSV 已导出", `文件已交给系统下载：${filename}`);
+      reportOperation("success", "视频 CSV 已导出", `文件已交给系统下载：${filename} · ${stats?.total_videos || 0} 条视频`, { key: "export-videos", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "导出视频失败");
       setMessage(detail);
-      reportOperation("error", "导出视频失败", detail);
+      reportOperation("error", "导出视频失败", detail, { key: "export-videos", startedAt });
     } finally {
       setBusy(false);
     }
@@ -434,15 +479,16 @@ export default function App() {
   async function createBackup() {
     setBusy(true);
     setMessage("");
-    reportOperation("running", "创建数据库备份", "正在请求服务器生成 SQLite 数据库快照…");
+    const startedAt = Date.now();
+    reportOperation("running", "创建数据库备份", "正在请求服务器生成 SQLite 数据库快照…", { key: "backup-create" });
     try {
       const backup = await api.createBackup(30);
       setBackups(await api.backups());
-      reportOperation("success", "备份已创建", `${backup.name} · ${formatBytes(backup.size)}，可在备份管理中下载。`);
+      reportOperation("success", "备份已创建", `${backup.name} · ${formatBytes(backup.size)}，可在备份管理中下载。`, { key: "backup-create", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "创建备份失败");
       setMessage(detail);
-      reportOperation("error", "创建备份失败", detail);
+      reportOperation("error", "创建备份失败", detail, { key: "backup-create", startedAt });
     } finally {
       setBusy(false);
     }
@@ -451,15 +497,16 @@ export default function App() {
   async function downloadBackup(name: string) {
     setBusy(true);
     setMessage("");
-    reportOperation("running", "下载备份", `正在下载 ${name}…`);
+    const startedAt = Date.now();
+    reportOperation("running", "下载备份", `正在下载 ${name}…`, { key: "backup-download" });
     try {
       const content = await api.downloadBackup(name);
       downloadBlobFile(name, new Blob([content], { type: "application/octet-stream" }));
-      reportOperation("success", "备份已开始下载", `文件已交给系统下载：${name}`);
+      reportOperation("success", "备份已开始下载", `文件已交给系统下载：${name}`, { key: "backup-download", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "下载备份失败");
       setMessage(detail);
-      reportOperation("error", "下载备份失败", detail);
+      reportOperation("error", "下载备份失败", detail, { key: "backup-download", startedAt });
     } finally {
       setBusy(false);
     }
@@ -490,17 +537,23 @@ export default function App() {
   }
 
   async function syncAll() {
+    const syncQueueBusy = Boolean(dashboard?.sync.progress?.running || (dashboard?.sync.queue_size || 0) > 0);
+    if (syncQueueBusy) {
+      reportOperation("error", "同步队列未空", "已有同步任务正在运行或排队，请等待完成后再触发全部同步。", { key: "sync-all" });
+      return;
+    }
     setBusy(true);
     setMessage("");
-    reportOperation("running", "全部同步", `正在把 ${stats?.active_accounts || accountsMeta.total || 0} 个启用账号加入同步队列…`);
+    const startedAt = Date.now();
+    reportOperation("running", "全部同步", `正在把 ${stats?.active_accounts || accountsMeta.total || 0} 个启用账号加入同步队列…`, { key: "sync-all" });
     try {
       const result = await api.syncAll();
       await loadData();
-      reportOperation("success", "全部同步已触发", result.message || "同步任务已加入队列，可在运维中心查看进度。");
+      reportOperation("success", "全部同步已触发", `已加入队列 ${result.queued ?? stats?.active_accounts ?? 0} 个账号，当前队列 ${result.queue_size ?? "-"}。`, { key: "sync-all", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "同步失败");
       setMessage(detail);
-      reportOperation("error", "全部同步失败", detail);
+      reportOperation("error", "全部同步失败", detail, { key: "sync-all", startedAt });
     } finally {
       setBusy(false);
     }
@@ -509,16 +562,17 @@ export default function App() {
   async function syncOne(accountId: number) {
     setBusy(true);
     setMessage("");
+    const startedAt = Date.now();
     const account = accounts.find((item) => item.id === accountId) || (accountDetail?.id === accountId ? accountDetail : null);
-    reportOperation("running", "同步账号", `正在触发 ${account ? `@${account.username}` : `账号 #${accountId}`} 同步…`);
+    reportOperation("running", "同步账号", `正在触发 ${account ? `@${account.username}` : `账号 #${accountId}`} 同步…`, { key: `sync-account-${accountId}` });
     try {
       const result = await api.syncAccount(accountId);
       await loadData();
-      reportOperation("success", "账号同步已触发", result.message || "同步任务已加入队列，可稍后刷新查看结果。");
+      reportOperation("success", "账号同步已触发", `${result.message || "同步任务已加入队列"} · 当前队列 ${result.queue_size ?? "-"}`, { key: `sync-account-${accountId}`, startedAt });
     } catch (error) {
       const detail = errorDetail(error, "同步失败");
       setMessage(detail);
-      reportOperation("error", "账号同步失败", detail);
+      reportOperation("error", "账号同步失败", detail, { key: `sync-account-${accountId}`, startedAt });
     } finally {
       setBusy(false);
     }
@@ -690,10 +744,22 @@ export default function App() {
 
   async function importAccounts() {
     if (!importText.trim()) return;
+    const lineCount = importText.split(/\r?\n/).filter((line) => line.trim()).length;
+    const confirmed = window.confirm([
+      `即将导入 ${lineCount} 行账号数据。`,
+      "",
+      `默认分组：${importGroup.trim() || "不设置"}`,
+      `默认手机：${importPhone.trim() || "不设置"}`,
+      `默认员工：${importEmployee.trim() || "不设置"}`,
+      `导入后同步：${importSync ? "加入同步队列" : "不自动同步"}`,
+      "",
+      "导入会新增账号或更新已有账号标签，请确认粘贴内容无误。"
+    ].join("\n"));
+    if (!confirmed) return;
     setBusy(true);
     setMessage("");
-    const lineCount = importText.split(/\r?\n/).filter((line) => line.trim()).length;
-    reportOperation("running", "批量导入账号", `正在解析并导入 ${lineCount} 行账号数据…`);
+    const startedAt = Date.now();
+    reportOperation("running", "批量导入账号", `正在解析并导入 ${lineCount} 行账号数据…`, { key: "import-accounts" });
     try {
       const result = await api.importAccounts({
         raw: importText,
@@ -705,11 +771,11 @@ export default function App() {
       setImportText("");
       await loadData();
       setView("dashboard");
-      reportOperation("success", "批量导入完成", `新增 ${result.added}，更新 ${result.updated}，已加入同步队列 ${result.queued}。`);
+      reportOperation("success", "批量导入完成", `新增 ${result.added}，更新 ${result.updated}，已加入同步队列 ${result.queued}。`, { key: "import-accounts", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "批量导入失败");
       setMessage(detail);
-      reportOperation("error", "批量导入失败", detail);
+      reportOperation("error", "批量导入失败", detail, { key: "import-accounts", startedAt });
     } finally {
       setBusy(false);
     }
@@ -719,16 +785,17 @@ export default function App() {
     if (!selectedAlertIds.length) return;
     setBusy(true);
     setMessage("");
-    reportOperation("running", "标记告警已读", `正在处理 ${selectedAlertIds.length} 条所选告警…`);
+    const startedAt = Date.now();
+    reportOperation("running", "标记告警已读", `正在处理 ${selectedAlertIds.length} 条所选告警…`, { key: "alerts-read-selected" });
     try {
       const result = await api.markAlertsRead(selectedAlertIds);
       setSelectedAlertIds([]);
       await loadData();
-      reportOperation("success", "告警已处理", `已标记 ${result.updated} 条告警为已读。`);
+      reportOperation("success", "告警已处理", `已标记 ${result.updated} 条告警为已读。`, { key: "alerts-read-selected", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "批量告警操作失败");
       setMessage(detail);
-      reportOperation("error", "批量告警操作失败", detail);
+      reportOperation("error", "批量告警操作失败", detail, { key: "alerts-read-selected", startedAt });
     } finally {
       setBusy(false);
     }
@@ -737,15 +804,16 @@ export default function App() {
   async function markAllAlertsRead() {
     setBusy(true);
     setMessage("");
-    reportOperation("running", "全部告警已读", `正在处理 ${stats?.unread_alerts || 0} 条未读告警…`);
+    const startedAt = Date.now();
+    reportOperation("running", "全部告警已读", `正在处理 ${stats?.unread_alerts || 0} 条未读告警…`, { key: "alerts-read-all" });
     try {
       await api.markAllAlertsRead();
       await loadData();
-      reportOperation("success", "全部告警已读", "所有未读告警已标记为已读。");
+      reportOperation("success", "全部告警已读", "所有未读告警已标记为已读。", { key: "alerts-read-all", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "全部告警操作失败");
       setMessage(detail);
-      reportOperation("error", "全部告警操作失败", detail);
+      reportOperation("error", "全部告警操作失败", detail, { key: "alerts-read-all", startedAt });
     } finally {
       setBusy(false);
     }
@@ -784,6 +852,7 @@ export default function App() {
   }
 
   const visibleAlerts = unreadOnly ? alerts.filter((alert) => !alert.is_read) : alerts;
+  const syncQueueBusy = Boolean(dashboard?.sync.progress?.running || (dashboard?.sync.queue_size || 0) > 0 || activeOperationKey === "sync-all");
   const viewTitles: Record<View, [string, string]> = {
     dashboard: ["团队监控台", "集中服务器，多平台客户端。"],
     quality: ["数据健康", "检查过期同步、无视频、失败同步和缺失指标账号。"],
@@ -919,9 +988,9 @@ export default function App() {
               <RefreshCcw aria-hidden="true" />
             </button>
             {view === "dashboard" ? (
-              <button className="primary-button" disabled={busy || !authenticated} onClick={() => void syncAll()}>
+              <button className="primary-button" disabled={busy || !authenticated || syncQueueBusy} onClick={() => void syncAll()}>
                 <Play aria-hidden="true" />
-                全部同步
+                {syncQueueBusy ? "同步排队中" : "全部同步"}
               </button>
             ) : null}
           </div>
@@ -1074,6 +1143,8 @@ export default function App() {
             auditLogs={auditLogs}
             backups={backups}
             operation={operation}
+            operationHistory={operationHistory}
+            activeOperationKey={activeOperationKey}
             busy={busy}
             authenticated={authenticated}
             onRefresh={() => void loadData(api, { announce: true })}
@@ -1141,7 +1212,7 @@ function OperationNotice({ operation }: { operation: OperationState }) {
       <div>
         <strong>{operation.title}<span>{label}</span></strong>
         <p>{operation.detail}</p>
-        <small>{operation.timestamp}</small>
+        <small>{operation.timestamp}{operation.durationMs ? ` · 用时 ${formatDuration(operation.durationMs)}` : ""}</small>
       </div>
     </section>
   );
@@ -2038,6 +2109,8 @@ function OperationsPage({
   auditLogs,
   backups,
   operation,
+  operationHistory,
+  activeOperationKey,
   busy,
   authenticated,
   onRefresh,
@@ -2053,6 +2126,8 @@ function OperationsPage({
   auditLogs: AuditLog[];
   backups: BackupList | null;
   operation: OperationState | null;
+  operationHistory: OperationState[];
+  activeOperationKey: string;
   busy: boolean;
   authenticated: boolean;
   onRefresh: () => void;
@@ -2064,6 +2139,7 @@ function OperationsPage({
   const progress = dashboard?.sync.progress;
   const queueSize = dashboard?.sync.queue_size ?? progress?.queue_size ?? 0;
   const syncRunning = Boolean(progress?.running);
+  const syncBlocked = syncRunning || queueSize > 0 || activeOperationKey === "sync-all";
   const availableProviders = providers.filter((provider) => provider.available !== false).length;
   const failedProviders = providers.filter((provider) => provider.available === false || (provider.consecutive_failures || 0) > 0);
   const latestBackup = backups?.items[0];
@@ -2091,9 +2167,9 @@ function OperationsPage({
             <RefreshCcw aria-hidden="true" />
             刷新状态
           </button>
-          <button className="primary-button" disabled={busy || !authenticated} onClick={onSyncAll}>
+          <button className="primary-button" disabled={busy || !authenticated || syncBlocked} onClick={onSyncAll}>
             <Play aria-hidden="true" />
-            全部同步
+            {syncBlocked ? "同步排队中" : "全部同步"}
           </button>
           <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onCreateBackup}>
             <FileUp aria-hidden="true" />
@@ -2102,6 +2178,30 @@ function OperationsPage({
           <button className="ghost-light-button" disabled={busy || !authenticated || !latestBackup} onClick={() => latestBackup && onDownloadBackup(latestBackup.name)}>
             下载最新备份
           </button>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>最近任务结果</h2>
+          <span>{operationHistory.length} 条</span>
+        </div>
+        <div className="task-timeline">
+          {operationHistory.map((item, index) => (
+            <article className={`task-card task-${item.status}`} key={`${item.timestamp}-${item.title}-${index}`}>
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.detail}</p>
+              </div>
+              <small>{item.timestamp}{item.durationMs ? ` · ${formatDuration(item.durationMs)}` : ""}</small>
+            </article>
+          ))}
+          {!operationHistory.length ? (
+            <EmptyState
+              title="暂无任务记录"
+              detail="刷新、同步、导入、导出和备份操作完成后，会在这里留下最近结果。"
+            />
+          ) : null}
         </div>
       </section>
 

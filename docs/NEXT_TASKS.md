@@ -4,10 +4,10 @@ Updated: 2026-07-13
 
 ## Immediate Tasks
 
-1. Finish 0.2.11: validate and publish data quality and health checks.
+1. Finish 0.2.12: validate and publish operator efficiency improvements.
    - Run service tests plus desktop type/build checks.
-   - Commit and publish the 0.2.11 changes after validation.
-   - Deploy the server because 0.2.11 adds V2 API behavior.
+   - Commit and publish the 0.2.12 changes after validation.
+   - Deploy the server because sync V2 responses now include queue summaries.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -52,18 +52,21 @@ Updated: 2026-07-13
 - Added desktop operations center, provider health, backup management, sync
   logs, and audit logs.
 - Added V2 backup and audit APIs with tests.
-- Released 0.2.6, 0.2.7, 0.2.8, 0.2.9, and 0.2.10.
+- Released 0.2.6 through 0.2.11.
 - Added 0.2.9 desktop operation feedback and clearer empty states.
 - Added 0.2.10 account/video shortcuts, cross-links, video link actions, and
   safer bulk-update confirmations.
-- Implemented 0.2.11 data quality API, account quality filters, desktop data
-  health page, and tests in the working tree.
+- Released 0.2.11 data quality API, account quality filters, desktop data
+  health page, server deployment, and online smoke tests.
+- Implemented 0.2.12 operation history, task duration/result feedback, sync
+  duplicate guards, import confirmation, and queue summary responses in the
+  working tree.
 
 ## Follow-up Product Tasks
 
 1. Close remaining account/video productivity gaps from the recovered replica.
 
-2. Add operator health views for stale data, provider failures, and failed syncs.
+2. Add operator efficiency and long-running task safety improvements.
 
 3. Improve docs and in-app guidance for non-technical team users.
 
@@ -79,7 +82,7 @@ Updated: 2026-07-13
 
 ## Current Local Artifacts
 
-- Windows 0.2.10 installer:
-  `release/tiktokmonitor-windows-0.2.10-account-video-productivity/msi/TikTokMonitor_0.2.10_x64_en-US.msi`
+- Windows 0.2.11 installer:
+  `release/tiktokmonitor-windows-0.2.11-data-quality-health/msi/TikTokMonitor_0.2.11_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.

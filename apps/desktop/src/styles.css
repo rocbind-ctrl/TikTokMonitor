@@ -1047,6 +1047,57 @@ td small {
   gap: 16px;
 }
 
+.task-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.task-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d8e0e3;
+  border-left: 4px solid #0c6e7e;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.task-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #17343b;
+}
+
+.task-card p {
+  margin: 0;
+  color: #405058;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.task-card small {
+  flex: 0 0 auto;
+  color: #6b7c84;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.task-running {
+  border-left-color: #0c6e7e;
+  background: #f6fbfc;
+}
+
+.task-success {
+  border-left-color: #2f8f5b;
+}
+
+.task-error {
+  border-left-color: #b84f20;
+  background: #fff8f5;
+}
+
 .ops-fact-list {
   display: grid;
   gap: 8px;
@@ -1225,6 +1276,7 @@ td small {
 
   .profile-panel,
   .operations-hero,
+  .task-card,
   .settings-actions {
     align-items: flex-start;
     flex-direction: column;
