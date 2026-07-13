@@ -837,6 +837,44 @@ td small {
   background: #fff8f5;
 }
 
+.operations-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.operations-hero p {
+  margin-top: 6px;
+  color: #5c6c73;
+  font-size: 14px;
+}
+
+.operations-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.operations-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ops-fact-list {
+  display: grid;
+  gap: 8px;
+  color: #405058;
+  font-size: 14px;
+}
+
+.ops-fact-list span {
+  overflow-wrap: anywhere;
+}
+
 .empty-state,
 .form-help {
   color: #5c6c73;
@@ -964,6 +1002,7 @@ td small {
   .account-filter-grid,
   .bulk-tag-panel,
   .log-filter-grid,
+  .operations-grid,
   .detail-metrics,
   .form-grid,
   .settings-grid {
@@ -976,6 +1015,7 @@ td small {
   }
 
   .profile-panel,
+  .operations-hero,
   .settings-actions {
     align-items: flex-start;
     flex-direction: column;

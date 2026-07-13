@@ -38,7 +38,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "backups" | "import" | "settings";
+type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "providers" | "operations" | "backups" | "import" | "settings";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
@@ -568,6 +568,7 @@ export default function App() {
     alerts: ["告警中心", "集中处理未读告警、异常提示和关联账号。"],
     logs: ["同步日志", "按状态、采集源和关键词排查同步任务。"],
     providers: ["采集源健康", "查看 provider 成功率、延迟和最近失败情况。"],
+    operations: ["运维中心", "集中查看服务器、同步、采集源、备份和最近日志。"],
     backups: ["备份管理", "查看、创建和下载服务器数据库备份。"],
     import: ["批量导入账号", "每行一个账号，可附带分组、手机和员工。"],
     settings: ["设置", "仅显示可安全编辑的服务端配置。"]
@@ -642,6 +643,10 @@ export default function App() {
           <button className={view === "providers" ? "active" : ""} disabled={!authenticated} onClick={() => setView("providers")}>
             <Server aria-hidden="true" />
             采集源
+          </button>
+          <button className={view === "operations" ? "active" : ""} disabled={!authenticated} onClick={() => setView("operations")}>
+            <Activity aria-hidden="true" />
+            运维中心
           </button>
           <button className={view === "backups" ? "active" : ""} disabled={!authenticated} onClick={() => setView("backups")}>
             <FileUp aria-hidden="true" />
@@ -805,6 +810,22 @@ export default function App() {
         ) : null}
         {view === "providers" ? (
           <ProvidersPage providers={providers} />
+        ) : null}
+        {view === "operations" ? (
+          <OperationsPage
+            health={health}
+            stats={stats}
+            dashboard={dashboard}
+            providers={providers}
+            logs={logs}
+            backups={backups}
+            busy={busy}
+            authenticated={authenticated}
+            onRefresh={() => void loadData()}
+            onSyncAll={() => void syncAll()}
+            onCreateBackup={() => void createBackup()}
+            onDownloadBackup={(name) => void downloadBackup(name)}
+          />
         ) : null}
         {view === "backups" ? (
           <BackupsPage
@@ -1466,6 +1487,164 @@ function ProvidersPage({ providers }: { providers: ProviderHealth[] }) {
           ))}
         </div>
         {!providers.length ? <p className="empty-state">暂无采集源健康数据；完成同步后会开始记录。</p> : null}
+      </section>
+    </section>
+  );
+}
+
+function OperationsPage({
+  health,
+  stats,
+  dashboard,
+  providers,
+  logs,
+  backups,
+  busy,
+  authenticated,
+  onRefresh,
+  onSyncAll,
+  onCreateBackup,
+  onDownloadBackup
+}: {
+  health: Health | null;
+  stats: Stats | null;
+  dashboard: DashboardData | null;
+  providers: ProviderHealth[];
+  logs: SyncLog[];
+  backups: BackupList | null;
+  busy: boolean;
+  authenticated: boolean;
+  onRefresh: () => void;
+  onSyncAll: () => void;
+  onCreateBackup: () => void;
+  onDownloadBackup: (name: string) => void;
+}) {
+  const scheduler = stats?.scheduler || health?.scheduler || {};
+  const progress = dashboard?.sync.progress;
+  const queueSize = dashboard?.sync.queue_size ?? progress?.queue_size ?? 0;
+  const syncRunning = Boolean(progress?.running);
+  const availableProviders = providers.filter((provider) => provider.available !== false).length;
+  const failedProviders = providers.filter((provider) => provider.available === false || (provider.consecutive_failures || 0) > 0);
+  const latestBackup = backups?.items[0];
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<Server />} label="服务状态" value={health?.ok ? 1 : 0} detail={health?.ok ? `在线 · v${health.version}` : "未连接"} />
+        <Metric icon={<RefreshCcw />} label="同步队列" value={queueSize} detail={syncRunning ? `同步中 ${progress?.completed || 0}/${progress?.total || 0}` : "当前等待任务"} />
+        <Metric icon={<CheckCircle2 />} label="采集源" value={availableProviders} detail={`${providers.length} 个已记录`} />
+        <Metric icon={<FileUp />} label="备份数量" value={backups?.total || 0} detail={latestBackup ? `最新 ${formatDate(latestBackup.modified_at)}` : "暂无备份"} />
+      </section>
+
+      <section className="panel operations-hero">
+        <div>
+          <h2>运维快捷操作</h2>
+          <p>这里聚合日常维护最常用的动作：刷新状态、触发同步、创建备份和下载最新备份。</p>
+        </div>
+        <div className="operations-actions">
+          <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onRefresh}>
+            <RefreshCcw aria-hidden="true" />
+            刷新状态
+          </button>
+          <button className="primary-button" disabled={busy || !authenticated} onClick={onSyncAll}>
+            <Play aria-hidden="true" />
+            全部同步
+          </button>
+          <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onCreateBackup}>
+            <FileUp aria-hidden="true" />
+            创建备份
+          </button>
+          <button className="ghost-light-button" disabled={busy || !authenticated || !latestBackup} onClick={() => latestBackup && onDownloadBackup(latestBackup.name)}>
+            下载最新备份
+          </button>
+        </div>
+      </section>
+
+      <section className="operations-grid">
+        <section className="panel">
+          <div className="panel-head">
+            <h2>服务器与调度器</h2>
+            <span>{scheduler.running ? "运行中" : "未运行"}</span>
+          </div>
+          <div className="ops-fact-list">
+            <span>账号：{stats?.total_accounts || health?.accounts || 0} 个（启用 {stats?.active_accounts || health?.active_accounts || 0}）</span>
+            <span>视频：{compactNumber(stats?.total_videos)} · 播放 {compactNumber(stats?.total_plays)}</span>
+            <span>同步间隔：{scheduler.interval_minutes ? `${scheduler.interval_minutes} 分钟` : "-"}</span>
+            <span>下次同步：{formatDate(scheduler.next_run)}</span>
+            <span>上次同步：{formatDate(scheduler.last_run || stats?.last_sync_at)}</span>
+            <span>上次摘要：{scheduler.last_summary || "-"}</span>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <h2>同步状态</h2>
+            <span>{syncRunning ? "正在同步" : "空闲"}</span>
+          </div>
+          <div className="ops-fact-list">
+            <span>当前账号：{progress?.current_username ? `@${progress.current_username}` : "-"}</span>
+            <span>进度：{progress?.completed || 0}/{progress?.total || 0}</span>
+            <span>队列：{queueSize} 个</span>
+            <span>同步中账号：{dashboard?.sync.syncing_ids.length || 0} 个</span>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <h2>备份摘要</h2>
+            <span>{formatBytes(backups?.total_size)}</span>
+          </div>
+          {latestBackup ? (
+            <div className="ops-fact-list">
+              <span>最新文件：{latestBackup.name}</span>
+              <span>大小：{formatBytes(latestBackup.size)}</span>
+              <span>更新时间：{formatDate(latestBackup.modified_at)}</span>
+              <button className="text-button" disabled={busy || !authenticated} onClick={() => onDownloadBackup(latestBackup.name)}>下载最新备份</button>
+            </div>
+          ) : (
+            <p className="empty-state">暂无备份。建议先创建一份手动备份。</p>
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <h2>采集源风险</h2>
+            <span>{failedProviders.length ? `${failedProviders.length} 个需关注` : "正常"}</span>
+          </div>
+          <div className="stack-list">
+            {(failedProviders.length ? failedProviders : providers.slice(0, 4)).map((provider) => (
+              <article className="list-item" key={provider.provider}>
+                <strong>{provider.provider}</strong>
+                <span>成功率 {provider.success_rate ?? 100}% · 连续失败 {provider.consecutive_failures || 0}</span>
+                <small>最近失败：{formatDate(provider.last_failure_at || provider.last_failure)}</small>
+              </article>
+            ))}
+            {!providers.length ? <p className="empty-state">暂无采集源数据。</p> : null}
+          </div>
+        </section>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>最近同步日志</h2>
+          <span>{logs.length} 条</span>
+        </div>
+        <div className="table-wrap">
+          <table className="compact-table">
+            <thead><tr><th>时间</th><th>账号</th><th>状态</th><th>采集源</th><th>消息</th></tr></thead>
+            <tbody>
+              {logs.slice(0, 8).map((log) => (
+                <tr key={log.id}>
+                  <td>{formatDate(log.created_at)}</td>
+                  <td>{log.username || "系统"}</td>
+                  <td><span className={`level-badge level-${log.status === "success" ? "info" : log.status || "warning"}`}>{log.status}</span></td>
+                  <td>{log.provider_used || "-"}</td>
+                  <td>{log.message || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!logs.length ? <p className="empty-state">暂无同步日志。</p> : null}
       </section>
     </section>
   );

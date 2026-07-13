@@ -5,7 +5,7 @@ export type ApiClient = ReturnType<typeof createApiClient>;
 export interface Health {
   ok: boolean;
   version: string;
-  scheduler: unknown;
+  scheduler: SchedulerInfo;
   accounts: number;
   active_accounts: number;
   unread_alerts: number;
@@ -19,7 +19,15 @@ export interface Stats {
   total_plays: number;
   unread_alerts: number;
   last_sync_at: string | null;
-  scheduler: unknown;
+  scheduler: SchedulerInfo;
+}
+
+export interface SchedulerInfo {
+  running?: boolean;
+  interval_minutes?: number;
+  next_run?: string | null;
+  last_run?: string | null;
+  last_summary?: string;
 }
 
 export interface Account {
