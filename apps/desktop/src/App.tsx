@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   CircleDot,
+  Copy,
+  ExternalLink,
   FileUp,
   LogOut,
   Play,
@@ -76,6 +78,16 @@ function formatDate(value: string | null | undefined) {
 function signedNumber(value: number | undefined) {
   const number = value || 0;
   return `${number > 0 ? "+" : ""}${compactNumber(number)}`;
+}
+
+function profileUrl(username: string | undefined) {
+  const clean = (username || "").replace(/^@/, "").trim();
+  return clean ? `https://www.tiktok.com/@${clean}` : "";
+}
+
+function videoUrl(video: Pick<Video, "video_id" | "account">) {
+  if (!video.video_id || !video.account?.username) return "";
+  return `${profileUrl(video.account.username)}/video/${video.video_id}`;
 }
 
 function operationTime() {
@@ -336,6 +348,40 @@ export default function App() {
     downloadBlobFile(filename, new Blob([content], { type }));
   }
 
+  async function copyText(text: string, label: string) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      reportOperation("success", "已复制链接", `${label} 已复制到剪贴板。`);
+    } catch (error) {
+      const detail = errorDetail(error, "复制失败");
+      setMessage(detail);
+      reportOperation("error", "复制失败", detail);
+    }
+  }
+
+  function showAccountLogs(accountId: number) {
+    setLogFilters({ account_id: accountId });
+    setLogPage(1);
+    setView("logs");
+    reportOperation("success", "已筛选同步日志", `正在查看账号 #${accountId} 的同步记录。`);
+  }
+
+  function showAccountAudit(accountId: number) {
+    setAuditFilters({ account_id: accountId });
+    setAuditPage(1);
+    setView("audit");
+    reportOperation("success", "已筛选审计日志", `正在查看账号 #${accountId} 的操作记录。`);
+  }
+
+  function showAlertCenterForAccount(account: Pick<Account, "id" | "username">) {
+    setUnreadOnly(false);
+    setAlertLevel("");
+    setAlertPage(1);
+    setView("alerts");
+    reportOperation("success", "已打开告警中心", `当前版本告警中心暂未按账号过滤；可查看与 @${account.username} 相关的近期告警。`);
+  }
+
   async function exportAccountsCsv() {
     setBusy(true);
     setMessage("");
@@ -485,7 +531,35 @@ export default function App() {
   }
 
   async function bulkUpdateAccounts(updates: AccountUpdate) {
-    if (!window.confirm(`确定要批量更新当前筛选出的 ${accountsMeta.total} 个账号吗？`)) return;
+    const labels: Record<string, string> = {
+      group_name: "品类/分组",
+      phone: "手机",
+      employee: "员工",
+      note: "备注"
+    };
+    const updateLines = Object.entries(updates)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `- ${labels[key] || key}：${value || "清空"}`);
+    const filterLines = [
+      accountFilters.q ? `关键词：${accountFilters.q}` : "",
+      accountFilters.group ? `品类：${accountFilters.group}` : "",
+      accountFilters.phone ? `手机：${accountFilters.phone}` : "",
+      accountFilters.employee ? `员工：${accountFilters.employee}` : "",
+      accountFilters.post_today ? `今日发文：${accountFilters.post_today === "yes" ? "已发" : "未发"}` : "",
+      `状态：${accountFilters.status || "active"}`
+    ].filter(Boolean);
+    const confirmed = window.confirm([
+      `将批量更新当前筛选出的 ${accountsMeta.total} 个账号。`,
+      "",
+      "修改内容：",
+      ...updateLines,
+      "",
+      "当前筛选：",
+      ...(filterLines.length ? filterLines.map((line) => `- ${line}`) : ["- 无筛选"]),
+      "",
+      "该操作会写入所有匹配账号，请确认。"
+    ].join("\n"));
+    if (!confirmed) return;
     setBusy(true);
     setMessage("");
     reportOperation("running", "批量更新账号", `正在更新当前筛选出的 ${accountsMeta.total} 个账号…`);
@@ -891,6 +965,7 @@ export default function App() {
             onToggleActive={(account) => void toggleAccountActive(account)}
             onDeleteAccount={(account) => void deleteAccount(account)}
             onOpenAccount={(id) => void openAccount(id)}
+            onCopyAccountLink={(account) => void copyText(profileUrl(account.username), `@${account.username} 主页链接`)}
             onAlert={(alert) => void handleAlert(alert)}
             onReadAll={() => markAllAlertsRead()}
           />
@@ -995,11 +1070,15 @@ export default function App() {
             busy={busy}
             onSync={() => void syncOne(accountDetail.id)}
             onVideo={(id) => void openVideo(id)}
+            onCopyProfile={() => void copyText(profileUrl(accountDetail.username), `@${accountDetail.username} 主页链接`)}
+            onShowLogs={() => showAccountLogs(accountDetail.id)}
+            onShowAudit={() => showAccountAudit(accountDetail.id)}
+            onShowAlerts={() => showAlertCenterForAccount(accountDetail)}
             onVideoPage={(page) => void openAccount(accountDetail.id, page, accountDetail.logs_meta?.page || 1)}
             onLogPage={(page) => void openAccount(accountDetail.id, accountDetail.videos_meta?.page || 1, page)}
           />
         ) : null}
-        {view === "video" && videoDetail ? <VideoPage video={videoDetail} onAccount={(id) => void openAccount(id)} onHistoryPage={(page) => void openVideo(videoDetail.id, page)} /> : null}
+        {view === "video" && videoDetail ? <VideoPage video={videoDetail} onAccount={(id) => void openAccount(id)} onCopyLink={() => void copyText(videoUrl(videoDetail), "视频链接")} onHistoryPage={(page) => void openVideo(videoDetail.id, page)} /> : null}
         {view === "import" ? (
           <ImportPage
             text={importText}
@@ -1095,6 +1174,7 @@ function Dashboard({
   onToggleActive,
   onDeleteAccount,
   onOpenAccount,
+  onCopyAccountLink,
   onAlert,
   onReadAll
 }: {
@@ -1141,6 +1221,7 @@ function Dashboard({
   onToggleActive: (account: Account) => void;
   onDeleteAccount: (account: Account) => void;
   onOpenAccount: (id: number) => void;
+  onCopyAccountLink: (account: Account) => void;
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
 }) {
@@ -1319,7 +1400,14 @@ function Dashboard({
               <tbody>
                 {accounts.map((account) => (
                   <tr className={account.is_active ? "" : "inactive-row"} key={account.id}>
-                    <td><button className="link-button" onClick={() => onOpenAccount(account.id)}>@{account.username}</button><span>{account.nickname || account.employee || "未标注"}</span></td>
+                    <td>
+                      <button className="link-button" onClick={() => onOpenAccount(account.id)}>@{account.username}</button>
+                      <span>{account.nickname || account.employee || "未标注"}</span>
+                      <div className="mini-action-row">
+                        <a href={profileUrl(account.username)} target="_blank" rel="noreferrer">TikTok</a>
+                        <button onClick={() => onCopyAccountLink(account)}>复制</button>
+                      </div>
+                    </td>
                     <td>
                       <EditableAccountTags account={account} busy={busy || !authenticated} onSave={(payload) => onUpdateAccount(account.id, payload)} />
                     </td>
@@ -1332,6 +1420,7 @@ function Dashboard({
                     <td>
                       <div className="account-actions">
                         <button className="icon-button" title="同步账号" disabled={busy || !authenticated} onClick={() => onSync(account.id)}><RefreshCcw aria-hidden="true" /></button>
+                        <button className="text-button" disabled={busy || !authenticated} onClick={() => onOpenAccount(account.id)}>详情</button>
                         <button className="text-button" disabled={busy || !authenticated} onClick={() => onToggleActive(account)}>{account.is_active ? "停用" : "启用"}</button>
                         <button className="text-button danger-text" disabled={busy || !authenticated} onClick={() => onDeleteAccount(account)}>删除</button>
                       </div>
@@ -2128,11 +2217,15 @@ function EditableAccountTags({
   );
 }
 
-function AccountPage({ account, busy, onSync, onVideo, onVideoPage, onLogPage }: {
+function AccountPage({ account, busy, onSync, onVideo, onCopyProfile, onShowLogs, onShowAudit, onShowAlerts, onVideoPage, onLogPage }: {
   account: AccountDetail;
   busy: boolean;
   onSync: () => void;
   onVideo: (id: number) => void;
+  onCopyProfile: () => void;
+  onShowLogs: () => void;
+  onShowAudit: () => void;
+  onShowAlerts: () => void;
   onVideoPage: (page: number) => void;
   onLogPage: (page: number) => void;
 }) {
@@ -2144,9 +2237,27 @@ function AccountPage({ account, busy, onSync, onVideo, onVideoPage, onLogPage }:
     <section className="panel profile-panel">
       <div className="profile-heading">
         {account.avatar_url ? <img className="avatar" src={account.avatar_url} alt="" /> : <UserRound aria-hidden="true" />}
-        <div><h2>@{account.username}</h2><p>{account.nickname || "未设置昵称"} · {account.group || "未分组"}</p></div>
+        <div>
+          <h2>@{account.username}</h2>
+          <p>{account.nickname || "未设置昵称"} · {account.group || "未分组"} · {account.employee || "未分配员工"}</p>
+        </div>
       </div>
-      <button className="primary-button" disabled={busy} onClick={onSync}><RefreshCcw aria-hidden="true" />同步账号</button>
+      <div className="profile-actions">
+        <button className="primary-button" disabled={busy} onClick={onSync}><RefreshCcw aria-hidden="true" />同步账号</button>
+        <a className="ghost-light-button" href={profileUrl(account.username)} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />打开 TikTok</a>
+        <button className="ghost-light-button" onClick={onCopyProfile}><Copy aria-hidden="true" />复制主页</button>
+      </div>
+    </section>
+    <section className="panel quick-nav-panel">
+      <div>
+        <h2>快捷排查</h2>
+        <p>从账号直接跳到相关记录，少绕路一点点，手感会好很多。</p>
+      </div>
+      <div className="quick-nav-actions">
+        <button className="ghost-light-button" onClick={onShowLogs}><RefreshCcw aria-hidden="true" />同步日志</button>
+        <button className="ghost-light-button" onClick={onShowAudit}><CheckCircle2 aria-hidden="true" />审计记录</button>
+        <button className="ghost-light-button" onClick={onShowAlerts}><AlertTriangle aria-hidden="true" />告警中心</button>
+      </div>
     </section>
     <section className="metric-grid detail-metrics">
       <Metric icon={<Users />} label="粉丝" value={account.followers} detail={`24h ${signedNumber(growth?.follower_delta)}`} />
@@ -2196,14 +2307,23 @@ function AccountPage({ account, busy, onSync, onVideo, onVideoPage, onLogPage }:
   </section>;
 }
 
-function VideoPage({ video, onAccount, onHistoryPage }: { video: Video; onAccount: (id: number) => void; onHistoryPage: (page: number) => void }) {
+function VideoPage({ video, onAccount, onCopyLink, onHistoryPage }: { video: Video; onAccount: (id: number) => void; onCopyLink: () => void; onHistoryPage: (page: number) => void }) {
+  const tikTokUrl = videoUrl(video);
   return <section className="detail-layout">
     <section className="panel profile-panel">
       <div className="profile-heading">
         {video.cover_url ? <img className="video-cover" src={video.cover_url} alt="" /> : <VideoIcon aria-hidden="true" />}
-        <div><h2>{video.title || "无标题视频"}</h2>{video.account ? <button className="link-button" onClick={() => onAccount(video.account!.id)}>@{video.account.username}</button> : null}</div>
+        <div>
+          <h2>{video.title || "无标题视频"}</h2>
+          {video.account ? <button className="link-button" onClick={() => onAccount(video.account!.id)}>@{video.account.username}</button> : null}
+          <p>{video.video_id ? `视频 ID：${video.video_id}` : "暂无 TikTok 视频 ID"}</p>
+        </div>
       </div>
-      {video.video_id ? <a className="ghost-light-button" href={`https://www.tiktok.com/@${video.account?.username || ""}/video/${video.video_id}`} target="_blank" rel="noreferrer">打开 TikTok</a> : null}
+      <div className="profile-actions">
+        {video.account ? <button className="ghost-light-button" onClick={() => onAccount(video.account!.id)}><UserRound aria-hidden="true" />账号详情</button> : null}
+        {tikTokUrl ? <a className="ghost-light-button" href={tikTokUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />打开 TikTok</a> : null}
+        <button className="ghost-light-button" disabled={!tikTokUrl} onClick={onCopyLink}><Copy aria-hidden="true" />复制链接</button>
+      </div>
     </section>
     <section className="metric-grid detail-metrics">
       <Metric icon={<Activity />} label="播放" value={video.play_count} detail={`发布于 ${formatDate(video.published_at)}`} />

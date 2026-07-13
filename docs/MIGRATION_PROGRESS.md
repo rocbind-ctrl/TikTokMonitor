@@ -13,7 +13,7 @@ architecture.
 Latest published release commit:
 
 ```text
-ded82ec Release 0.2.8 audit logs
+ca7e1b9 Release 0.2.9 desktop operation feedback
 ```
 
 GitHub remote:
@@ -63,14 +63,17 @@ https://github.com/netwebqi/TikTokMonitor
 - Added desktop data insights, operations center, provider health, backup
   management, sync logs, and audit logs.
 - Added V2 backup and audit APIs with isolated test coverage.
-- Released 0.2.6, 0.2.7, and 0.2.8 through GitHub Actions.
-- Started 0.2.9 desktop usability work for operation feedback, persistent
-  operation results, and clearer empty states.
+- Released 0.2.6, 0.2.7, 0.2.8, and 0.2.9 through GitHub Actions.
+- Added 0.2.9 desktop usability improvements for operation feedback,
+  persistent operation results, and clearer empty states.
+- Implemented 0.2.10 desktop account/video productivity improvements in the
+  working tree: table shortcuts, account detail cross-links, video link actions,
+  and safer bulk-update confirmations.
 
 ## Pending
 
 - Continue 0.2.x product work against the recovered replica feature set.
-- Validate and publish 0.2.9 after desktop operation-feedback checks pass.
+- Validate and publish 0.2.10 account/video productivity improvements.
 - Improve desktop navigation and feature discoverability beyond the 0.2.9
   feedback pass.
 - Add safer operator workflows for long-running sync/import/export tasks.

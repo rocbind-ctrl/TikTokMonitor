@@ -4,31 +4,25 @@ Updated: 2026-07-13
 
 ## Immediate Tasks
 
-1. Finish 0.2.9: validate and publish desktop operation feedback.
+1. Finish 0.2.10: validate and publish account/video productivity improvements.
    - Run TypeScript and production desktop build checks.
-   - Commit and publish the 0.2.9 changes after validation.
-   - Deploy only if server-facing changes are added; current 0.2.9 scope is
+   - Commit and publish the 0.2.10 desktop changes after validation.
+   - Deploy only if server-facing changes are added; current 0.2.10 scope is
      desktop-only.
 
-2. Prepare 0.2.10: account/video productivity gaps.
-   - Add richer table actions for accounts and videos.
-   - Improve account detail navigation and cross-links between account, videos,
-     alerts, logs, and audit records.
-   - Add safer bulk-action summaries before applying changes.
-
-3. Prepare 0.2.11: data quality and health checks.
+2. Prepare 0.2.11: data quality and health checks.
    - Surface stale accounts, failed providers, recent sync failures, and missing
      metrics as operator-facing health cards.
    - Add filters for stale/no-video/no-recent-post accounts.
    - Add tests for the new health/status responses.
 
-4. Keep release operations repeatable.
+3. Keep release operations repeatable.
    - Update docs after each version.
    - Verify GitHub Actions before deployment.
    - Create a server backup before every deployment.
    - Smoke-test the deployed API and desktop-critical flows after deployment.
 
-5. Plan the database migration path.
+4. Plan the database migration path.
    - SQLite remains acceptable for early use.
    - PostgreSQL should be planned before multiple operators rely on the system
      every day.
@@ -65,19 +59,18 @@ Updated: 2026-07-13
 - Added desktop operations center, provider health, backup management, sync
   logs, and audit logs.
 - Added V2 backup and audit APIs with tests.
-- Released 0.2.6, 0.2.7, and 0.2.8.
-- Implemented 0.2.9 desktop operation feedback and clearer empty states in the
-  working tree.
+- Released 0.2.6, 0.2.7, 0.2.8, and 0.2.9.
+- Added 0.2.9 desktop operation feedback and clearer empty states.
+- Implemented 0.2.10 account/video shortcuts, cross-links, video link actions,
+  and safer bulk-update confirmations in the working tree.
 
 ## Follow-up Product Tasks
 
-1. Improve desktop operation feedback and task visibility.
+1. Close remaining account/video productivity gaps from the recovered replica.
 
-2. Close remaining account/video productivity gaps from the recovered replica.
+2. Add operator health views for stale data, provider failures, and failed syncs.
 
-3. Add operator health views for stale data, provider failures, and failed syncs.
-
-4. Improve docs and in-app guidance for non-technical team users.
+3. Improve docs and in-app guidance for non-technical team users.
 
 ## Engineering Tasks
 
@@ -91,7 +84,7 @@ Updated: 2026-07-13
 
 ## Current Local Artifacts
 
-- Windows 0.2.8 installer:
-  `release/tiktokmonitor-windows-0.2.8-audit-logs/msi/TikTokMonitor_0.2.8_x64_en-US.msi`
+- Windows 0.2.9 installer:
+  `release/tiktokmonitor-windows-0.2.9-operation-feedback/msi/TikTokMonitor_0.2.9_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.

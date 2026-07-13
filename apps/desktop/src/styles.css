@@ -755,6 +755,31 @@ td small {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+.mini-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.mini-action-row a,
+.mini-action-row button {
+  border: 0;
+  padding: 0;
+  color: #0c6e7e;
+  background: transparent;
+  font: inherit;
+  text-decoration: none;
+}
+
+.mini-action-row a:hover,
+.mini-action-row button:hover {
+  color: #07515d;
+  text-decoration: underline;
 }
 
 .inactive-row {
@@ -1017,6 +1042,30 @@ td small {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.profile-actions,
+.quick-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-nav-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #f8fbfb;
+}
+
+.quick-nav-panel p {
+  margin-top: 4px;
+  color: #5c6c73;
+  font-size: 14px;
 }
 
 .profile-heading {
