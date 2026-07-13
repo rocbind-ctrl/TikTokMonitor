@@ -4,25 +4,18 @@ Updated: 2026-07-13
 
 ## Immediate Tasks
 
-1. Finish 0.2.10: validate and publish account/video productivity improvements.
-   - Run TypeScript and production desktop build checks.
-   - Commit and publish the 0.2.10 desktop changes after validation.
-   - Deploy only if server-facing changes are added; current 0.2.10 scope is
-     desktop-only.
+1. Finish 0.2.11: validate and publish data quality and health checks.
+   - Run service tests plus desktop type/build checks.
+   - Commit and publish the 0.2.11 changes after validation.
+   - Deploy the server because 0.2.11 adds V2 API behavior.
 
-2. Prepare 0.2.11: data quality and health checks.
-   - Surface stale accounts, failed providers, recent sync failures, and missing
-     metrics as operator-facing health cards.
-   - Add filters for stale/no-video/no-recent-post accounts.
-   - Add tests for the new health/status responses.
-
-3. Keep release operations repeatable.
+2. Keep release operations repeatable.
    - Update docs after each version.
    - Verify GitHub Actions before deployment.
    - Create a server backup before every deployment.
    - Smoke-test the deployed API and desktop-critical flows after deployment.
 
-4. Plan the database migration path.
+3. Plan the database migration path.
    - SQLite remains acceptable for early use.
    - PostgreSQL should be planned before multiple operators rely on the system
      every day.
@@ -59,10 +52,12 @@ Updated: 2026-07-13
 - Added desktop operations center, provider health, backup management, sync
   logs, and audit logs.
 - Added V2 backup and audit APIs with tests.
-- Released 0.2.6, 0.2.7, 0.2.8, and 0.2.9.
+- Released 0.2.6, 0.2.7, 0.2.8, 0.2.9, and 0.2.10.
 - Added 0.2.9 desktop operation feedback and clearer empty states.
-- Implemented 0.2.10 account/video shortcuts, cross-links, video link actions,
-  and safer bulk-update confirmations in the working tree.
+- Added 0.2.10 account/video shortcuts, cross-links, video link actions, and
+  safer bulk-update confirmations.
+- Implemented 0.2.11 data quality API, account quality filters, desktop data
+  health page, and tests in the working tree.
 
 ## Follow-up Product Tasks
 
@@ -84,7 +79,7 @@ Updated: 2026-07-13
 
 ## Current Local Artifacts
 
-- Windows 0.2.9 installer:
-  `release/tiktokmonitor-windows-0.2.9-operation-feedback/msi/TikTokMonitor_0.2.9_x64_en-US.msi`
+- Windows 0.2.10 installer:
+  `release/tiktokmonitor-windows-0.2.10-account-video-productivity/msi/TikTokMonitor_0.2.10_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.

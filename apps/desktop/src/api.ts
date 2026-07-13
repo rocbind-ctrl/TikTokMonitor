@@ -55,6 +55,9 @@ export interface Account {
   posted_today?: boolean;
   today_latest_video?: Video | null;
   today_videos?: Video[];
+  latest_video_at?: string | null;
+  latest_sync_status?: string;
+  quality_flags?: Record<string, boolean>;
 }
 
 export interface AccountGrowth {
@@ -241,6 +244,7 @@ export interface DashboardOptions {
   phones: string[];
   employees: string[];
   sort_options: Record<string, string>;
+  quality_filters?: Record<string, string>;
 }
 
 export interface SyncProgress {
@@ -335,8 +339,38 @@ export interface AccountFilters {
   phone?: string;
   employee?: string;
   post_today?: string;
+  quality?: string;
   status?: string;
   sort?: string;
+}
+
+export interface DataQualitySample {
+  id: number;
+  username: string;
+  nickname?: string;
+  group?: string;
+  employee?: string;
+  last_sync_at?: string | null;
+  latest_video_at?: string | null;
+  latest_sync_status?: string;
+  videos: number;
+  followers: number;
+  total_plays: number;
+}
+
+export interface DataQualityCard {
+  key: string;
+  label: string;
+  count: number;
+  severity: "ok" | "warning" | "error" | string;
+  samples: DataQualitySample[];
+}
+
+export interface DataQuality {
+  total_accounts: number;
+  healthy_accounts: number;
+  cards: DataQualityCard[];
+  filters: Record<string, string>;
 }
 
 export interface AccountUpdate {
@@ -538,6 +572,8 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
     health: () => request<Health>("/api/v2/health", { method: "GET" }),
     stats: () => request<Stats>("/api/v2/stats", { method: "GET" }),
     dashboard: () => request<DashboardData>("/api/v2/dashboard", { method: "GET" }),
+    dataQuality: (limit = 5) =>
+      request<DataQuality>(`/api/v2/data-quality?limit=${limit}`, { method: "GET" }),
     insights: (days = 7, limit = 10) =>
       request<InsightsData>(`/api/v2/insights?days=${days}&limit=${limit}`, { method: "GET" }),
     exportAccountsCsv: (filters: AccountFilters = {}) => {

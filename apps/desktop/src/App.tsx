@@ -29,6 +29,8 @@ import {
   BackupList,
   createApiClient,
   DashboardData,
+  DataQuality,
+  DataQualityCard,
   Health,
   InsightsData,
   LogFilters,
@@ -42,7 +44,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings";
+type View = "dashboard" | "quality" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 type OperationState = {
   status: "running" | "success" | "error";
@@ -114,6 +116,7 @@ export default function App() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [dataQuality, setDataQuality] = useState<DataQuality | null>(null);
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -183,6 +186,7 @@ export default function App() {
       const nextAuthenticated = nextSession.authenticated || !nextSession.auth_enabled;
       if (!nextAuthenticated) {
         setDashboard(null);
+        setDataQuality(null);
         setInsights(null);
         setStats(null);
         setAccounts([]);
@@ -199,8 +203,9 @@ export default function App() {
         return;
       }
 
-      const [nextDashboard, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextAuditLogs, nextProviders, nextBackups] = await Promise.all([
+      const [nextDashboard, nextDataQuality, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextAuditLogs, nextProviders, nextBackups] = await Promise.all([
         client.dashboard(),
+        client.dataQuality(),
         client.insights(),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
@@ -211,6 +216,7 @@ export default function App() {
         client.backups()
       ]);
       setDashboard(nextDashboard);
+      setDataQuality(nextDataQuality);
       setInsights(nextInsights);
       setStats(nextStats);
       setAccounts(nextAccounts.items);
@@ -380,6 +386,13 @@ export default function App() {
     setAlertPage(1);
     setView("alerts");
     reportOperation("success", "已打开告警中心", `当前版本告警中心暂未按账号过滤；可查看与 @${account.username} 相关的近期告警。`);
+  }
+
+  function applyQualityFilter(quality: string) {
+    setAccountFilters((current) => ({ ...current, quality, status: "active", sort: "plays_desc" }));
+    setAccountPage(1);
+    setView("dashboard");
+    reportOperation("success", "已应用数据健康筛选", dataQuality?.filters?.[quality] || quality);
   }
 
   async function exportAccountsCsv() {
@@ -773,6 +786,7 @@ export default function App() {
   const visibleAlerts = unreadOnly ? alerts.filter((alert) => !alert.is_read) : alerts;
   const viewTitles: Record<View, [string, string]> = {
     dashboard: ["团队监控台", "集中服务器，多平台客户端。"],
+    quality: ["数据健康", "检查过期同步、无视频、失败同步和缺失指标账号。"],
     insights: ["数据分析", "趋势、健康排行、异常检测和增长榜。"],
     account: ["账号详情", "账号资料、增长与同步记录。"],
     video: ["视频详情", "视频指标与历史快照。"],
@@ -843,6 +857,10 @@ export default function App() {
           <button className={view === "insights" ? "active" : ""} disabled={!authenticated} onClick={() => setView("insights")}>
             <VideoIcon aria-hidden="true" />
             数据分析
+          </button>
+          <button className={view === "quality" ? "active" : ""} disabled={!authenticated} onClick={() => setView("quality")}>
+            <AlertTriangle aria-hidden="true" />
+            数据健康
           </button>
           <button className={view === "alerts" ? "active" : ""} disabled={!authenticated} onClick={() => setView("alerts")}>
             <AlertTriangle aria-hidden="true" />
@@ -968,6 +986,15 @@ export default function App() {
             onCopyAccountLink={(account) => void copyText(profileUrl(account.username), `@${account.username} 主页链接`)}
             onAlert={(alert) => void handleAlert(alert)}
             onReadAll={() => markAllAlertsRead()}
+          />
+        ) : null}
+        {view === "quality" ? (
+          <QualityPage
+            quality={dataQuality}
+            providers={providers}
+            logs={logs}
+            onApplyQuality={applyQualityFilter}
+            onOpenAccount={(id) => void openAccount(id)}
           />
         ) : null}
         {view === "insights" ? (
@@ -1242,7 +1269,7 @@ function Dashboard({
     setBulkTags({ group_name: "", phone: "", employee: "", note: "" });
   };
   const clearAccountFilters = () => {
-    (["q", "group", "phone", "employee", "post_today"] as (keyof AccountFilters)[]).forEach((key) => onAccountFilterChange(key, ""));
+    (["q", "group", "phone", "employee", "post_today", "quality"] as (keyof AccountFilters)[]).forEach((key) => onAccountFilterChange(key, ""));
     onAccountFilterChange("status", "active");
     onAccountFilterChange("sort", "plays_desc");
   };
@@ -1361,6 +1388,10 @@ function Dashboard({
               <option value="">今日发文：全部</option>
               <option value="yes">今日已发</option>
               <option value="no">今日未发</option>
+            </select>
+            <select className="filter-select" value={accountFilters.quality || ""} onChange={(event) => onAccountFilterChange("quality", event.target.value)}>
+              <option value="">数据健康：全部</option>
+              {Object.entries(options.quality_filters || {}).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
             </select>
             <select className="filter-select" value={accountFilters.status || "active"} onChange={(event) => onAccountFilterChange("status", event.target.value)}>
               <option value="active">启用账号</option>
@@ -1611,6 +1642,121 @@ function InsightsPage({
           </div>
         </section>
       ) : null}
+    </section>
+  );
+}
+
+function QualityPage({
+  quality,
+  providers,
+  logs,
+  onApplyQuality,
+  onOpenAccount
+}: {
+  quality: DataQuality | null;
+  providers: ProviderHealth[];
+  logs: SyncLog[];
+  onApplyQuality: (quality: string) => void;
+  onOpenAccount: (id: number) => void;
+}) {
+  if (!quality) return <p className="empty-state">正在加载数据健康状态…</p>;
+  const failedProviders = providers.filter((provider) => provider.available === false || (provider.consecutive_failures || 0) > 0);
+  const recentFailures = logs.filter((log) => log.status === "error").slice(0, 6);
+  const healthyRatio = quality.total_accounts
+    ? Math.round((quality.healthy_accounts / quality.total_accounts) * 100)
+    : 100;
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<CheckCircle2 />} label="健康账号" value={quality.healthy_accounts} detail={`${healthyRatio}% 无明显问题`} />
+        <Metric icon={<Users />} label="监控账号" value={quality.total_accounts} detail="当前启用账号范围" />
+        <Metric icon={<AlertTriangle />} label="健康问题" value={quality.cards.reduce((sum, card) => sum + card.count, 0)} detail="同一账号可能命中多项" />
+        <Metric icon={<Server />} label="采集源风险" value={failedProviders.length} detail={`${providers.length} 个 provider 已记录`} />
+      </section>
+
+      <section className="quality-grid">
+        {quality.cards.map((card) => (
+          <QualityCard
+            card={card}
+            key={card.key}
+            onApply={() => onApplyQuality(card.key)}
+            onOpenAccount={onOpenAccount}
+          />
+        ))}
+      </section>
+
+      <section className="operations-grid">
+        <section className="panel">
+          <div className="panel-head">
+            <h2>采集源风险</h2>
+            <span>{failedProviders.length ? `${failedProviders.length} 个需关注` : "正常"}</span>
+          </div>
+          <div className="stack-list">
+            {(failedProviders.length ? failedProviders : providers.slice(0, 4)).map((provider) => (
+              <article className="list-item" key={provider.provider}>
+                <strong>{provider.provider}</strong>
+                <span>成功率 {provider.success_rate ?? 100}% · 连续失败 {provider.consecutive_failures || 0}</span>
+                <small>最近失败：{formatDate(provider.last_failure_at || provider.last_failure)}</small>
+              </article>
+            ))}
+            {!providers.length ? <EmptyState title="暂无采集源数据" detail="完成同步后，这里会显示 provider 成功率和失败风险。" /> : null}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <h2>最近失败同步</h2>
+            <span>{recentFailures.length} 条</span>
+          </div>
+          <div className="stack-list">
+            {recentFailures.map((log) => (
+              <article className="list-item" key={log.id}>
+                <strong>{log.username || "系统"}</strong>
+                <span>{log.message || "同步失败"}</span>
+                <small>{formatDate(log.created_at)} · {log.provider_used || "未知采集源"}</small>
+              </article>
+            ))}
+            {!recentFailures.length ? <EmptyState title="暂无失败同步" detail="最近同步日志里没有失败记录。" /> : null}
+          </div>
+        </section>
+      </section>
+    </section>
+  );
+}
+
+function QualityCard({
+  card,
+  onApply,
+  onOpenAccount
+}: {
+  card: DataQualityCard;
+  onApply: () => void;
+  onOpenAccount: (id: number) => void;
+}) {
+  return (
+    <section className={`panel quality-card quality-${card.severity}`}>
+      <div className="panel-head">
+        <div>
+          <h2>{card.label}</h2>
+          <span>{card.count ? "需要处理" : "暂无问题"}</span>
+        </div>
+        <strong>{card.count}</strong>
+      </div>
+      <button className="ghost-light-button" disabled={!card.count} onClick={onApply}>查看账号</button>
+      <div className="stack-list">
+        {card.samples.map((sample) => (
+          <article className="list-item" key={sample.id}>
+            <button className="list-action" onClick={() => onOpenAccount(sample.id)}>
+              <strong>@{sample.username}</strong>
+              <span>{sample.group || sample.employee || sample.nickname || "未标注"}</span>
+              <small>
+                同步 {formatDate(sample.last_sync_at)} · 视频 {sample.videos} · 最近发文 {formatDate(sample.latest_video_at)}
+              </small>
+            </button>
+          </article>
+        ))}
+        {!card.samples.length ? <p className="empty-state">当前没有样例账号。</p> : null}
+      </div>
     </section>
   );
 }

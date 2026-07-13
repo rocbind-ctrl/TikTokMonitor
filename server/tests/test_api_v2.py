@@ -157,6 +157,7 @@ class ApiV2TestCase(unittest.TestCase):
         self.login()
         first_id = self.create_account("alpha-account")
         second_id = self.create_account("beta-account")
+        third_id = self.create_account("gamma-empty")
 
         self.client.patch(
             f"/api/v2/accounts/{first_id}",
@@ -193,6 +194,15 @@ class ApiV2TestCase(unittest.TestCase):
                 )
             )
             db.add(AccountStatsHistory(account_id=first_id, follower_count=100, total_plays=1200, recorded_at=now))
+            db.add(
+                SyncLog(
+                    account_id=second_id,
+                    status="error",
+                    message="provider failed",
+                    videos_updated=0,
+                    created_at=now,
+                )
+            )
             db.commit()
         finally:
             db.close()
@@ -219,11 +229,37 @@ class ApiV2TestCase(unittest.TestCase):
         searched = self.client.get("/api/v2/accounts?q=priority")
         self.assertEqual(searched.json()["meta"]["total"], 1)
 
+        quality = self.client.get("/api/v2/data-quality")
+        self.assertEqual(quality.status_code, 200)
+        quality_body = quality.json()
+        self.assertTrue(quality_body["ok"])
+        cards = {card["key"]: card for card in quality_body["data"]["cards"]}
+        self.assertGreaterEqual(cards["no_videos"]["count"], 1)
+        self.assertGreaterEqual(cards["sync_failed"]["count"], 1)
+        self.assertIn("gamma-empty", [sample["username"] for sample in cards["no_videos"]["samples"]])
+
+        no_videos = self.client.get("/api/v2/accounts?quality=no_videos")
+        self.assertEqual(no_videos.status_code, 200)
+        self.assertEqual(no_videos.json()["meta"]["filters"]["quality"], "no_videos")
+        self.assertEqual(no_videos.json()["meta"]["total"], 1)
+        self.assertEqual(no_videos.json()["data"][0]["id"], third_id)
+        self.assertTrue(no_videos.json()["data"][0]["quality_flags"]["no_videos"])
+
+        sync_failed = self.client.get("/api/v2/accounts?quality=sync_failed")
+        self.assertEqual(sync_failed.status_code, 200)
+        self.assertEqual(sync_failed.json()["meta"]["total"], 1)
+        self.assertEqual(sync_failed.json()["data"][0]["id"], second_id)
+
         exported_accounts = self.client.get("/api/v2/export/accounts.csv?group=Beauty&employee=Alice&post_today=yes")
         self.assertEqual(exported_accounts.status_code, 200)
         self.assertIn("text/csv", exported_accounts.headers["content-type"])
         self.assertIn("alpha-account", exported_accounts.text)
         self.assertNotIn("beta-account", exported_accounts.text)
+
+        exported_quality = self.client.get("/api/v2/export/accounts.csv?quality=no_videos")
+        self.assertEqual(exported_quality.status_code, 200)
+        self.assertIn("gamma-empty", exported_quality.text)
+        self.assertNotIn("alpha-account", exported_quality.text)
 
         exported_videos = self.client.get(f"/api/v2/export/videos.csv?account_id={first_id}")
         self.assertEqual(exported_videos.status_code, 200)

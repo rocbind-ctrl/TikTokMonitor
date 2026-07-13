@@ -43,8 +43,10 @@ from app.config import get_alert_settings, get_monitor_settings, get_security_se
 from app.database import Account, Alert, AuditLog, SyncLog, Video, VideoStatsHistory, get_db, init_db
 from app.export import export_accounts_csv, export_videos_csv
 from app.groups import (
+    ACCOUNT_QUALITY_FILTERS,
     ACCOUNT_SORT_OPTIONS,
     _apply_filters,
+    data_quality_summary,
     distinct_values,
     group_stats_list,
     load_active_accounts_metrics,
@@ -597,6 +599,9 @@ def _account_row_payload(row: dict) -> dict:
                 _video_payload(video, include_account=False)
                 for video in row.get("today_videos") or []
             ],
+            "latest_video_at": _iso(row.get("latest_video_at")),
+            "latest_sync_status": row.get("latest_sync_status") or "",
+            "quality_flags": row.get("quality_flags") or {},
         }
     )
     return payload
@@ -672,6 +677,7 @@ def _account_filters_meta(
     employee: str,
     search: str,
     post_today: str,
+    quality: str = "",
     status: str = "active",
     sort: str = "plays_desc",
 ) -> dict:
@@ -681,6 +687,7 @@ def _account_filters_meta(
         "employee": employee,
         "q": search,
         "post_today": post_today,
+        "quality": quality,
         "status": status,
         "sort": sort,
     }
@@ -785,6 +792,15 @@ def api_v2_dashboard(db: Session = Depends(get_db)):
     )
 
 
+@app.get("/api/v2/data-quality")
+def api_v2_data_quality(limit: int = 5, db: Session = Depends(get_db)):
+    limit = min(20, max(0, limit))
+    metrics = load_active_accounts_metrics(db)
+    payload = data_quality_summary(db, metrics=metrics, limit=limit)
+    payload["filters"] = ACCOUNT_QUALITY_FILTERS
+    return _v2_success(payload)
+
+
 @app.get("/api/v2/insights")
 def api_v2_insights(days: int = 7, limit: int = 10, db: Session = Depends(get_db)):
     days = min(30, max(1, days))
@@ -824,6 +840,7 @@ def api_v2_export_accounts(
     phone: str = "",
     employee: str = "",
     post_today: str = "",
+    quality: str = "",
     status: str = "active",
     sort: str = "plays_desc",
     db: Session = Depends(get_db),
@@ -833,9 +850,12 @@ def api_v2_export_accounts(
     phone = phone.strip()
     employee = employee.strip()
     post_today = post_today.strip()
+    quality = quality.strip()
     status = status.strip().lower()
     if post_today not in ("", "yes", "no"):
         post_today = ""
+    if quality not in ACCOUNT_QUALITY_FILTERS:
+        quality = ""
     if status not in ("active", "inactive", "all"):
         status = "active"
     if sort not in ACCOUNT_SORT_OPTIONS:
@@ -848,6 +868,7 @@ def api_v2_export_accounts(
         employee=employee,
         search=search,
         post_today=post_today,
+        quality=quality,
         status=status,
         sort=sort,
         page=1,
@@ -919,6 +940,7 @@ def api_v2_list_accounts(
     phone: str = "",
     employee: str = "",
     post_today: str = "",
+    quality: str = "",
     status: str = "active",
     sort: str = "plays_desc",
     db: Session = Depends(get_db),
@@ -928,9 +950,12 @@ def api_v2_list_accounts(
     phone = phone.strip()
     employee = employee.strip()
     post_today = post_today.strip()
+    quality = quality.strip()
     status = status.strip().lower()
     if post_today not in ("", "yes", "no"):
         post_today = ""
+    if quality not in ACCOUNT_QUALITY_FILTERS:
+        quality = ""
     if status not in ("active", "inactive", "all"):
         status = "active"
     if sort not in ACCOUNT_SORT_OPTIONS:
@@ -944,6 +969,7 @@ def api_v2_list_accounts(
         employee=employee,
         search=search,
         post_today=post_today,
+        quality=quality,
         status=status,
         sort=sort,
         page=page,
@@ -961,6 +987,7 @@ def api_v2_list_accounts(
             employee=employee,
             search=search,
             post_today=post_today,
+            quality=quality,
             status=status,
             sort=sort,
         ),
@@ -970,6 +997,7 @@ def api_v2_list_accounts(
             "groups": distinct_values(db, Account.group_name),
             "phones": distinct_values(db, Account.phone),
             "employees": distinct_values(db, Account.employee),
+            "quality_filters": ACCOUNT_QUALITY_FILTERS,
         },
     }
     return _v2_success([_account_row_payload(row) for row in rows], meta=meta)
@@ -1036,9 +1064,12 @@ async def api_v2_bulk_tag_accounts(request: Request, db: Session = Depends(get_d
     phone = str(filters.get("phone") or "").strip()
     employee = str(filters.get("employee") or "").strip()
     post_today = str(filters.get("post_today") or "").strip()
+    quality = str(filters.get("quality") or "").strip()
     status = str(filters.get("status") or "active").strip().lower()
     if post_today not in ("", "yes", "no"):
         post_today = ""
+    if quality not in ACCOUNT_QUALITY_FILTERS:
+        quality = ""
     if status not in ("active", "inactive", "all"):
         status = "active"
 
@@ -1050,6 +1081,7 @@ async def api_v2_bulk_tag_accounts(request: Request, db: Session = Depends(get_d
         employee=employee,
         search=search,
         post_today=post_today,
+        quality=quality,
         status=status,
         sort="plays_desc",
         page=1,

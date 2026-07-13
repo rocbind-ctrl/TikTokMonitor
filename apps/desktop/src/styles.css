@@ -497,6 +497,40 @@ h2 {
   gap: 16px;
 }
 
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.quality-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.quality-card .panel-head {
+  margin-bottom: 0;
+}
+
+.quality-card .panel-head strong {
+  font-size: 34px;
+}
+
+.quality-ok {
+  border-color: #d7eee5;
+}
+
+.quality-warning {
+  border-color: #ffe1b8;
+  background: #fffdf8;
+}
+
+.quality-error {
+  border-color: #ffd0c2;
+  background: #fff8f5;
+}
+
 .compact-table {
   min-width: 680px;
 }
@@ -511,7 +545,7 @@ h2 {
 
 .account-filter-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(6, minmax(120px, 150px)) auto;
+  grid-template-columns: minmax(180px, 1fr) repeat(7, minmax(120px, 150px)) auto;
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -1171,6 +1205,7 @@ td small {
   .metric-grid,
   .content-grid,
   .analytics-grid,
+  .quality-grid,
   .entry-row,
   .account-filter-grid,
   .bulk-tag-panel,

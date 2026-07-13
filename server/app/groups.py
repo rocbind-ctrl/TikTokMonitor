@@ -8,13 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.analytics import (
     _latest_today_video,
+    _as_utc,
     _utcnow,
     account_growth_fast,
     today_db_bounds,
     today_local_bounds,
     videos_plays_increase_map,
 )
-from app.database import Account, Video, chunked
+from app.database import Account, SyncLog, Video, chunked
 
 
 ACCOUNT_SORT_OPTIONS = {
@@ -24,6 +25,14 @@ ACCOUNT_SORT_OPTIONS = {
     "today_new_plays_desc": "新发播放 ↓",
     "followers_desc": "粉丝 ↓",
     "today_posts_desc": "今日新发 ↓",
+}
+
+ACCOUNT_QUALITY_FILTERS = {
+    "stale_sync": "超过 24 小时未同步",
+    "no_videos": "没有视频记录",
+    "no_recent_post": "7 天内未发文",
+    "sync_failed": "最近同步失败",
+    "missing_metrics": "缺少关键指标",
 }
 
 
@@ -107,6 +116,23 @@ def _today_videos_map(db: Session, account_ids: list[int]) -> dict[int, list]:
     return result
 
 
+def _latest_sync_status_map(db: Session, account_ids: list[int]) -> dict[int, str]:
+    if not account_ids:
+        return {}
+    result: dict[int, str] = {}
+    for chunk in chunked(account_ids):
+        logs = (
+            db.query(SyncLog)
+            .filter(SyncLog.account_id.in_(chunk))
+            .order_by(SyncLog.account_id, SyncLog.created_at.desc(), SyncLog.id.desc())
+            .all()
+        )
+        for log in logs:
+            if log.account_id is not None and log.account_id not in result:
+                result[log.account_id] = log.status or ""
+    return result
+
+
 def _account_matches_filters(
     account: Account,
     *,
@@ -174,6 +200,7 @@ def load_active_accounts_metrics(db: Session, status: str = "active") -> dict:
     start_today, _ = today_local_bounds()
     delta_24h_map = videos_plays_increase_map(db, all_videos, past_24h)
     delta_today_map = videos_plays_increase_map(db, all_videos, start_today)
+    latest_sync_status = _latest_sync_status_map(db, account_ids)
 
     return {
         "accounts": all_accounts,
@@ -184,6 +211,7 @@ def load_active_accounts_metrics(db: Session, status: str = "active") -> dict:
         "delta_24h_map": delta_24h_map,
         "delta_today_map": delta_today_map,
         "start_today": start_today,
+        "latest_sync_status": latest_sync_status,
     }
 
 
@@ -197,6 +225,9 @@ def _build_account_rows(
     videos_by_account = metrics["videos_by_account"]
     delta_24h_map = metrics["delta_24h_map"]
     delta_today_map = metrics["delta_today_map"]
+    latest_sync_status = metrics.get("latest_sync_status", {})
+    stale_before = _utcnow() - timedelta(hours=24)
+    recent_post_before = _utcnow() - timedelta(days=7)
 
     rows = []
     for account in accounts:
@@ -205,6 +236,15 @@ def _build_account_rows(
         acc_videos = videos_by_account.get(account.id, [])
         latest = _latest_today_video(today_videos)
         today_new_plays = latest.play_count if latest else 0
+        latest_video_at = max(
+            [_as_utc(video.published_at) for video in acc_videos if video.published_at],
+            default=None,
+        )
+        last_sync_at = _as_utc(account.last_sync_at)
+        is_stale = not last_sync_at or last_sync_at < stale_before
+        has_recent_post = bool(latest_video_at and latest_video_at >= recent_post_before)
+        latest_sync_status_value = latest_sync_status.get(account.id, "")
+        missing_metrics = int(account.follower_count or 0) <= 0 and total_plays <= 0
         growth = account_growth_fast(
             db,
             account,
@@ -224,6 +264,15 @@ def _build_account_rows(
                 "today_latest_video": latest,
                 "today_videos": today_videos,
                 "posted_today": len(today_videos) > 0,
+                "latest_video_at": latest_video_at,
+                "latest_sync_status": latest_sync_status_value,
+                "quality_flags": {
+                    "stale_sync": is_stale,
+                    "no_videos": len(acc_videos) == 0,
+                    "no_recent_post": not has_recent_post,
+                    "sync_failed": latest_sync_status_value == "error",
+                    "missing_metrics": missing_metrics,
+                },
             }
         )
     return rows
@@ -252,6 +301,7 @@ def query_accounts(
     employee: str = "",
     search: str = "",
     post_today: str = "",
+    quality: str = "",
     status: str = "active",
     sort: str = "plays_desc",
     page: int = 1,
@@ -273,6 +323,8 @@ def query_accounts(
         rows = [r for r in rows if r["posted_today"]]
     elif post_today == "no":
         rows = [r for r in rows if not r["posted_today"]]
+    if quality in ACCOUNT_QUALITY_FILTERS:
+        rows = [r for r in rows if r.get("quality_flags", {}).get(quality)]
 
     rows = sort_account_rows(rows, sort)
     total = len(rows)
@@ -292,6 +344,46 @@ def query_accounts(
         "not_posted_accounts": sum(1 for r in rows if not r["posted_today"]),
     }
     return page_rows, total, filter_totals, page
+
+
+def data_quality_summary(db: Session, metrics: dict | None = None, limit: int = 5) -> dict:
+    bundle = metrics or load_active_accounts_metrics(db)
+    rows = _build_account_rows(db, bundle["accounts"], bundle)
+    cards = []
+    for key, label in ACCOUNT_QUALITY_FILTERS.items():
+        matched = [row for row in rows if row.get("quality_flags", {}).get(key)]
+        samples = []
+        for row in matched[: max(0, limit)]:
+            account = row["account"]
+            samples.append(
+                {
+                    "id": account.id,
+                    "username": account.username,
+                    "nickname": account.nickname,
+                    "group": account.group_name,
+                    "employee": account.employee,
+                    "last_sync_at": account.last_sync_at.isoformat() if account.last_sync_at else None,
+                    "latest_video_at": row["latest_video_at"].isoformat() if row["latest_video_at"] else None,
+                    "latest_sync_status": row["latest_sync_status"],
+                    "videos": len(bundle["videos_by_account"].get(account.id, [])),
+                    "followers": int(account.follower_count or 0),
+                    "total_plays": row["total_plays"],
+                }
+            )
+        cards.append(
+            {
+                "key": key,
+                "label": label,
+                "count": len(matched),
+                "severity": "error" if key in ("sync_failed", "stale_sync") and matched else "warning" if matched else "ok",
+                "samples": samples,
+            }
+        )
+    return {
+        "total_accounts": len(rows),
+        "healthy_accounts": sum(1 for row in rows if not any(row.get("quality_flags", {}).values())),
+        "cards": cards,
+    }
 
 
 def group_stats_list(db: Session, metrics: dict | None = None) -> list[dict]:
