@@ -4,19 +4,24 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Validate and publish 0.2.18 account list health visibility.
-   - Verify account-row health chips for stale sync, sync failure, no videos,
-     no recent posts, and missing metrics.
-   - Verify one-click filters from account status chips.
-   - Publish the Windows desktop build after GitHub Actions passes.
+1. Install-check 0.2.18 account list health visibility.
+   - Install the Windows 0.2.18 MSI.
+   - Connect to the deployed server and verify account-row health chips.
+   - Click stale sync, sync failure, no-video, no-recent-post, and missing
+     metric chips to confirm the matching account filter opens.
 
-2. Keep release operations repeatable.
+2. Start 0.2.19 batch-friendly video actions.
+   - Add safe selection for video rows.
+   - Add copy selected video links and copy selected video IDs.
+   - Keep exported CSV and existing video filters unchanged.
+
+3. Keep release operations repeatable.
    - Update docs after each version.
    - Verify GitHub Actions before deployment.
    - Create a server backup before every deployment.
    - Smoke-test the deployed API and desktop-critical flows after deployment.
 
-3. Plan the database migration path.
+4. Plan the database migration path.
    - SQLite remains acceptable for early use.
    - PostgreSQL should be planned before multiple operators rely on the system
      every day.
@@ -145,24 +150,21 @@ safe additions when they improve team operations.
   ranges, sorting, filtered video CSV export, desktop filter controls, video
   issue chips, GitHub Actions desktop builds, Windows installer artifact,
   server deployment, and online smoke tests.
-- Implemented 0.2.18 account list health visibility in the working tree:
-  account rows now show data-quality chips for stale sync, no videos, no recent
-  posts, sync failures, and missing metrics; clicking a chip applies the
-  matching account health filter. Validation and publication are pending.
+- Released 0.2.18 account list health visibility: account rows show
+  data-quality chips for stale sync, no videos, no recent posts, sync failures,
+  and missing metrics; clicking a chip applies the matching account health
+  filter. GitHub Actions Server Check and Desktop Build passed, and the Windows
+  installer artifact was downloaded locally.
 
 ## Follow-up Product Tasks
 
-1. Validate and publish 0.2.18 account list health visibility.
-   - Confirm local desktop build and GitHub Actions artifact.
-   - Install-check the Windows desktop build against the deployed server.
-
-2. Add batch-friendly video actions where safe, such as copy selected video
+1. Add batch-friendly video actions where safe, such as copy selected video
    links or IDs.
 
-3. Improve desktop navigation and feature discoverability for non-technical
+2. Improve desktop navigation and feature discoverability for non-technical
    operators.
 
-4. Keep the parity checklist synchronized as each 0.2.x release closes or
+3. Keep the parity checklist synchronized as each 0.2.x release closes or
    defers items.
 
 ## Engineering Tasks
@@ -183,5 +185,7 @@ safe additions when they improve team operations.
   `release/tiktokmonitor-windows-0.2.16-video-workspace/msi/TikTokMonitor_0.2.16_x64_en-US.msi`
 - Windows 0.2.17 installer:
   `release/rocbind-tiktokmonitor-windows-0.2.17-video-filters/msi/TikTokMonitor_0.2.17_x64_en-US.msi`
+- Windows 0.2.18 installer:
+  `release/rocbind-tiktokmonitor-windows-0.2.18-account-health-chips/tiktokmonitor-windows-latest/msi/TikTokMonitor_0.2.18_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.
