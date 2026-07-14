@@ -13,7 +13,7 @@ is 0.3.0 data analytics enhancement after release verification.
 Latest published release commit:
 
 ```text
-50e2919 Release 0.2.18 account health chips
+4427949 Release 0.2.19 0.2.x closeout
 ```
 
 GitHub remote:
@@ -100,14 +100,15 @@ https://github.com/rocbind-ctrl/TikTokMonitor
   and missing metrics; each chip jumps to the matching account health filter;
   GitHub Actions Server Check and Desktop Build passed, and the Windows
   installer artifact was downloaded locally.
-- Completed the local 0.2.19 closeout implementation: video row selection and
+- Released 0.2.19 as the 0.2.x closeout: video row selection and
   batch copy for links, IDs, and author usernames; account row/current-page
   copy actions; filtered empty-state guidance; consistent clipboard feedback;
-  and synchronized desktop version metadata. Publishing remains pending.
+  and synchronized desktop version metadata. GitHub Actions Server Check and
+  Windows/macOS/Linux Desktop Build passed, and the Windows MSI was downloaded.
 
 ## Pending
 
-- Publish 0.2.19, verify GitHub Actions, and install-check the Windows MSI.
+- Install-check the downloaded 0.2.19 Windows MSI against the deployed server.
 - Start 0.3.0 data analytics enhancement after 0.2.19 release verification.
 - Use `docs/NEXT_TASKS.md` as the active release and product-stage checklist.
 - Keep deployment and release notes synchronized after each published version.

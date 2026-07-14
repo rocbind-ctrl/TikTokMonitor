@@ -4,8 +4,7 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Publish and install-check the 0.2.19 closeout build.
-   - Verify GitHub Actions Server Check and Desktop Build.
+1. Install-check the published 0.2.19 closeout build.
    - Install the Windows MSI and connect it to the deployed server.
    - Verify video selection and batch copy for links, IDs, and authors.
    - Verify account-row and current-page copy actions.
@@ -156,9 +155,11 @@ safe additions when they improve team operations.
   and missing metrics; clicking a chip applies the matching account health
   filter. GitHub Actions Server Check and Desktop Build passed, and the Windows
   installer artifact was downloaded locally.
-- Prepared 0.2.19 as the 0.2.x closeout: video row selection and batch copy,
+- Released 0.2.19 as the 0.2.x closeout: video row selection and batch copy,
   account username/profile copy actions, clearer filtered empty states,
-  consistent clipboard feedback, and synchronized desktop version metadata.
+  consistent clipboard feedback, synchronized desktop version metadata,
+  successful Server Check/Desktop Build workflows, and a downloaded Windows
+  installer artifact.
 
 ## Follow-up Product Tasks
 
@@ -188,5 +189,7 @@ safe additions when they improve team operations.
   `release/rocbind-tiktokmonitor-windows-0.2.17-video-filters/msi/TikTokMonitor_0.2.17_x64_en-US.msi`
 - Windows 0.2.18 installer:
   `release/rocbind-tiktokmonitor-windows-0.2.18-account-health-chips/tiktokmonitor-windows-latest/msi/TikTokMonitor_0.2.18_x64_en-US.msi`
+- Windows 0.2.19 installer:
+  `release/rocbind-tiktokmonitor-windows-0.2.19-closeout/msi/TikTokMonitor_0.2.19_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.
