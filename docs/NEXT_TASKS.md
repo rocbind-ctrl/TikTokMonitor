@@ -4,11 +4,11 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Validate and publish 0.2.16 video workspace.
-   - Run desktop type/build checks.
-   - Commit and publish the 0.2.16 changes after validation.
-   - Server deployment is not required because this release only reuses the
-     existing `/api/v2/videos` API.
+1. Start 0.2.17 from the remaining replica feature parity gaps.
+   - Add stronger video filters for missing links, metric ranges, freshness,
+     and recent changes.
+   - Improve account list visibility for stale, failed, or incomplete accounts.
+   - Keep changes desktop-first unless a missing backend API is required.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -136,10 +136,10 @@ safe additions when they improve team operations.
 - Released 0.2.15 desktop usage guide for first use, daily checks,
   import/export, sync troubleshooting, backups, connection issues, GitHub
   Actions desktop builds, and Windows installer artifact.
-- Implemented 0.2.16 desktop video workspace in the working tree: side-nav
-  video list, paginated `/api/v2/videos` loading, video metrics, detail/open
-  TikTok/copy link/copy ID/author jump actions, dashboard quick entry, and
-  desktop version bump.
+- Released 0.2.16 desktop video workspace: side-nav video list, paginated
+  `/api/v2/videos` loading, video metrics, detail/open TikTok/copy link/copy
+  ID/author jump actions, dashboard quick entry, GitHub Actions desktop builds,
+  and Windows installer artifact.
 
 ## Follow-up Product Tasks
 
@@ -168,5 +168,7 @@ safe additions when they improve team operations.
 
 - Windows 0.2.15 installer:
   `release/tiktokmonitor-windows-0.2.15-in-app-operator-guide/msi/TikTokMonitor_0.2.15_x64_en-US.msi`
+- Windows 0.2.16 installer:
+  `release/tiktokmonitor-windows-0.2.16-video-workspace/msi/TikTokMonitor_0.2.16_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.
