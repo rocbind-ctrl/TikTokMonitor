@@ -4,9 +4,9 @@ Updated: 2026-07-13
 
 ## Immediate Tasks
 
-1. Finish 0.2.14: validate and publish account/video productivity shortcuts.
+1. Finish 0.2.15: validate and publish in-app operator guidance.
    - Run desktop type/build checks.
-   - Commit and publish the 0.2.14 changes after validation.
+   - Commit and publish the 0.2.15 changes after validation.
    - Server deployment is not required because this is desktop-only.
 
 2. Keep release operations repeatable.
@@ -52,7 +52,7 @@ Updated: 2026-07-13
 - Added desktop operations center, provider health, backup management, sync
   logs, and audit logs.
 - Added V2 backup and audit APIs with tests.
-- Released 0.2.6 through 0.2.13.
+- Released 0.2.6 through 0.2.14.
 - Added 0.2.9 desktop operation feedback and clearer empty states.
 - Added 0.2.10 account/video shortcuts, cross-links, video link actions, and
   safer bulk-update confirmations.
@@ -63,9 +63,12 @@ Updated: 2026-07-13
   deployment, and online smoke tests.
 - Released 0.2.13 dashboard workflow shortcuts, operator next-step guidance,
   and Windows desktop installer through GitHub Actions.
-- Implemented 0.2.14 account/video shortcuts in the working tree: copy
-  username, per-video open/copy actions from account detail, copy video ID, and
-  author profile actions from video detail.
+- Released 0.2.14 account/video shortcuts: copy username, per-video open/copy
+  actions from account detail, copy video ID, author profile actions, and
+  Windows desktop installer through GitHub Actions.
+- Implemented 0.2.15 desktop usage guide in the working tree for first use,
+  daily checks, import/export, sync troubleshooting, backups, and connection
+  issues.
 
 ## Follow-up Product Tasks
 
@@ -88,7 +91,7 @@ Updated: 2026-07-13
 
 ## Current Local Artifacts
 
-- Windows 0.2.13 installer:
-  `release/tiktokmonitor-windows-0.2.13-desktop-discoverability/msi/TikTokMonitor_0.2.13_x64_en-US.msi`
+- Windows 0.2.14 installer:
+  `release/tiktokmonitor-windows-0.2.14-account-video-shortcuts/msi/TikTokMonitor_0.2.14_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.

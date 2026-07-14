@@ -1,6 +1,6 @@
 [package]
 name = "tiktokmonitor-desktop"
-version = "0.2.14"
+version = "0.2.15"
 description = "Cross-platform desktop client for TikTokMonitor"
 authors = ["TikTokMonitor Team"]
 edition = "2021"

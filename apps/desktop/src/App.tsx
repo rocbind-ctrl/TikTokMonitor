@@ -44,7 +44,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "quality" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings";
+type View = "dashboard" | "quality" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings" | "help";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 type OperationState = {
   status: "running" | "success" | "error";
@@ -871,7 +871,8 @@ export default function App() {
     operations: ["运维中心", "集中查看服务器、同步、采集源、备份和最近日志。"],
     backups: ["备份管理", "查看、创建和下载服务器数据库备份。"],
     import: ["批量导入账号", "每行一个账号，可附带分组、手机和员工。"],
-    settings: ["设置", "仅显示可安全编辑的服务端配置。"]
+    settings: ["设置", "仅显示可安全编辑的服务端配置。"],
+    help: ["使用指南", "首次使用、日常流程、排查和交接说明。"]
   };
 
   return (
@@ -967,6 +968,10 @@ export default function App() {
           <button className={view === "settings" ? "active" : ""} disabled={!authenticated} onClick={() => void openSettings()}>
             <SettingsIcon aria-hidden="true" />
             设置
+          </button>
+          <button className={view === "help" ? "active" : ""} onClick={() => setView("help")}>
+            <CheckCircle2 aria-hidden="true" />
+            使用指南
           </button>
         </nav>
 
@@ -1211,6 +1216,7 @@ export default function App() {
           />
         ) : null}
         {view === "settings" ? <SettingsPage settings={settings} busy={busy} onChange={updateSetting} onSave={() => void saveSettings()} /> : null}
+        {view === "help" ? <HelpPage onNavigate={setView} authenticated={authenticated} /> : null}
       </section>
     </main>
   );
@@ -2713,6 +2719,113 @@ function VideoPage({
       {!video.history?.length ? <p className="empty-state">尚无历史快照；完成多次同步后将显示指标变化。</p> : null}
     </section>
   </section>;
+}
+
+function HelpPage({ onNavigate, authenticated }: { onNavigate: (view: View) => void; authenticated: boolean }) {
+  const guideSections = [
+    {
+      title: "首次使用",
+      icon: <Server aria-hidden="true" />,
+      items: [
+        "确认服务器地址是团队统一地址，例如 http://服务器IP:8099。",
+        "登录后先点“刷新”，确认账号、告警和同步日志能正常读取。",
+        "如果连接失败，先检查服务器地址、网络、防火墙和桌面端版本。"
+      ],
+      action: <button className="ghost-light-button" onClick={() => onNavigate("dashboard")}>回到总览</button>
+    },
+    {
+      title: "日常检查顺序",
+      icon: <Activity aria-hidden="true" />,
+      items: [
+        "先看总览的今日新发、今日增播和未读告警。",
+        "再进入数据健康，处理未同步、无视频、同步失败或缺指标账号。",
+        "最后按员工、品类或保存筛选导出 CSV 给团队复盘。"
+      ],
+      action: <button className="ghost-light-button" disabled={!authenticated} onClick={() => onNavigate("quality")}>打开数据健康</button>
+    },
+    {
+      title: "添加与导入账号",
+      icon: <FileUp aria-hidden="true" />,
+      items: [
+        "单个账号可在总览直接添加，支持用户名或 TikTok 主页链接。",
+        "批量导入每行一个账号，也可以写：用户名、分组、手机、员工、备注。",
+        "导入前会有确认框；如果勾选同步，导入后会加入同步队列。"
+      ],
+      action: <button className="ghost-light-button" disabled={!authenticated} onClick={() => onNavigate("import")}>批量导入</button>
+    },
+    {
+      title: "同步与排查",
+      icon: <RefreshCcw aria-hidden="true" />,
+      items: [
+        "全部同步适合低峰期触发；已有同步运行或排队时不要重复点击。",
+        "单个账号详情里可以同步账号，也能直接查看同步日志和审计记录。",
+        "同步失败时先看同步日志，再看采集源健康和运维中心的最近任务结果。"
+      ],
+      action: <button className="ghost-light-button" disabled={!authenticated} onClick={() => onNavigate("logs")}>查看同步日志</button>
+    },
+    {
+      title: "导出与交接",
+      icon: <Copy aria-hidden="true" />,
+      items: [
+        "导出账号 CSV 会带上当前筛选，适合按员工、品类或数据健康问题交接。",
+        "导出视频 CSV 用于复盘视频表现；账号/视频详情页也能复制链接。",
+        "批量修改前先确认筛选结果数量，避免误改不相关账号。"
+      ],
+      action: <button className="ghost-light-button" disabled={!authenticated} onClick={() => onNavigate("dashboard")}>去筛选账号</button>
+    },
+    {
+      title: "备份与运维",
+      icon: <CheckCircle2 aria-hidden="true" />,
+      items: [
+        "发布或大批量操作前，建议先在备份管理里创建一次数据库备份。",
+        "运维中心可以查看同步队列、采集源风险、最近任务结果和最新备份。",
+        "恢复数据库不在桌面端直接开放，避免误覆盖线上数据。"
+      ],
+      action: <button className="ghost-light-button" disabled={!authenticated} onClick={() => onNavigate("operations")}>打开运维中心</button>
+    }
+  ];
+  return (
+    <section className="detail-layout">
+      <section className="panel help-hero">
+        <div>
+          <h2>团队使用指南</h2>
+          <p>把最常见的操作路径放在这里：新人照着走，老手也能少翻文档。</p>
+        </div>
+        <div className="help-hero-actions">
+          <button className="primary-button" onClick={() => onNavigate("dashboard")}>从总览开始</button>
+          <button className="ghost-light-button" disabled={!authenticated} onClick={() => onNavigate("operations")}>查看运维中心</button>
+        </div>
+      </section>
+
+      <section className="help-grid">
+        {guideSections.map((section) => (
+          <article className="panel help-card" key={section.title}>
+            <div className="help-card-head">
+              <span>{section.icon}</span>
+              <h2>{section.title}</h2>
+            </div>
+            <ol>
+              {section.items.map((item) => <li key={item}>{item}</li>)}
+            </ol>
+            <div className="help-card-action">{section.action}</div>
+          </article>
+        ))}
+      </section>
+
+      <section className="panel help-checklist">
+        <div className="panel-head">
+          <h2>遇到问题先看这里</h2>
+          <span>快速排查</span>
+        </div>
+        <div className="checklist-grid">
+          <span>连接失败：检查服务器地址、端口 8099、防火墙、服务器容器状态。</span>
+          <span>账号没数据：先同步账号，再看同步日志里的失败原因。</span>
+          <span>导出找不到：文件会交给系统下载目录，注意浏览器/系统下载提示。</span>
+          <span>页面数据旧：点击右上角刷新，或到运维中心看同步队列是否仍在跑。</span>
+        </div>
+      </section>
+    </section>
+  );
 }
 
 function ImportPage({ text, group, phone, employee, sync, busy, onText, onGroup, onPhone, onEmployee, onSync, onSubmit }: {

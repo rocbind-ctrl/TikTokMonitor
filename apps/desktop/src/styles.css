@@ -1176,6 +1176,81 @@ td small {
   overflow-wrap: anywhere;
 }
 
+.help-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, #f4fbfc, #ffffff);
+}
+
+.help-hero p {
+  margin-top: 6px;
+  color: #5c6c73;
+  line-height: 1.55;
+}
+
+.help-hero-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.help-card {
+  display: grid;
+  gap: 12px;
+}
+
+.help-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.help-card-head span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #0c6e7e;
+  background: #e2f2f4;
+}
+
+.help-card ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: #405058;
+  line-height: 1.55;
+}
+
+.help-card-action {
+  margin-top: auto;
+}
+
+.checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.checklist-grid span {
+  border: 1px solid #d8e0e3;
+  border-radius: 10px;
+  padding: 12px;
+  color: #405058;
+  background: #fbfdfe;
+  line-height: 1.5;
+}
+
 .empty-state,
 .form-help {
   color: #5c6c73;
@@ -1325,6 +1400,8 @@ td small {
   .analytics-grid,
   .quality-grid,
   .quick-action-grid,
+  .help-grid,
+  .checklist-grid,
   .entry-row,
   .account-filter-grid,
   .bulk-tag-panel,
@@ -1346,6 +1423,7 @@ td small {
   .operations-hero,
   .task-card,
   .operator-guide,
+  .help-hero,
   .settings-actions {
     align-items: flex-start;
     flex-direction: column;

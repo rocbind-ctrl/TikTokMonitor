@@ -13,7 +13,7 @@ architecture.
 Latest published release commit:
 
 ```text
-b6dfb38 Release 0.2.13 desktop discoverability
+093a7e4 Release 0.2.14 account video shortcuts
 ```
 
 GitHub remote:
@@ -63,7 +63,7 @@ https://github.com/netwebqi/TikTokMonitor
 - Added desktop data insights, operations center, provider health, backup
   management, sync logs, and audit logs.
 - Added V2 backup and audit APIs with isolated test coverage.
-- Released 0.2.6 through 0.2.13 through GitHub Actions.
+- Released 0.2.6 through 0.2.14 through GitHub Actions.
 - Added 0.2.9 desktop usability improvements for operation feedback,
   persistent operation results, and clearer empty states.
 - Added 0.2.10 desktop account/video productivity improvements: table
@@ -79,15 +79,18 @@ https://github.com/netwebqi/TikTokMonitor
 - Released 0.2.13 desktop discoverability improvements: dashboard workflow
   shortcuts, operator next-step guidance for common actions, GitHub Actions
   desktop builds, and Windows installer artifact.
-- Implemented 0.2.14 account/video productivity improvements in the working
-  tree: account username copy, per-video TikTok/open/copy actions from account
-  detail, and video detail shortcuts for video ID, original video, and author
-  profile.
+- Released 0.2.14 account/video productivity improvements: account username
+  copy, per-video TikTok/open/copy actions from account detail, video detail
+  shortcuts for video ID/original video/author profile, GitHub Actions desktop
+  builds, and Windows installer artifact.
+- Implemented 0.2.15 in-app guidance in the working tree: a desktop usage
+  guide view for first use, daily checks, import/export, sync troubleshooting,
+  backup operations, and common connection/data issues.
 
 ## Pending
 
 - Continue 0.2.x product work against the recovered replica feature set.
-- Validate and publish 0.2.14 account/video productivity improvements.
+- Validate and publish 0.2.15 in-app guidance for non-technical operators.
 - Keep deployment and release notes synchronized after each published version.
 - Plan the database migration path before the system becomes daily team
   infrastructure.
