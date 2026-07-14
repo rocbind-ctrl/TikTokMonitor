@@ -4,11 +4,11 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Start 0.2.17 from the remaining replica feature parity gaps.
-   - Add stronger video filters for missing links, metric ranges, freshness,
-     and recent changes.
-   - Improve account list visibility for stale, failed, or incomplete accounts.
-   - Keep changes desktop-first unless a missing backend API is required.
+1. Validate and publish 0.2.17 video list filtering.
+   - Run server tests plus desktop type/build checks.
+   - Commit and publish the 0.2.17 changes after validation.
+   - Deploy the server after release because `/api/v2/videos` and video CSV
+     export now accept new filter parameters.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -32,9 +32,9 @@ safe additions when they improve team operations.
 
 - Account management: account list, add account, account detail, safe edits,
   batch import, saved filters, pagination, and CSV export.
-- Video monitoring: dedicated video list workspace, video detail, trend charts,
-  video CSV export, open/copy original video actions, author jump actions, and
-  account-detail video shortcuts.
+- Video monitoring: dedicated video list workspace, server-side video filters,
+  video detail, trend charts, filtered video CSV export, open/copy original
+  video actions, author jump actions, and account-detail video shortcuts.
 - Sync workflows: single-account sync, sync-all queueing, duplicate guards,
   sync logs, queue summaries, operation duration/result feedback, and clearer
   empty states.
@@ -54,7 +54,7 @@ safe additions when they improve team operations.
 
 2. Video list productivity.
    - Add stronger filters for missing links, low/high metrics, recent changes,
-     and sync freshness.
+     and sync freshness. `0.2.17` implements the first server-backed version.
    - Add batch-friendly actions where safe, such as copy/open selected video
      references.
    - Make metric changes and abnormal videos easier to spot without opening
@@ -140,12 +140,16 @@ safe additions when they improve team operations.
   `/api/v2/videos` loading, video metrics, detail/open TikTok/copy link/copy
   ID/author jump actions, dashboard quick entry, GitHub Actions desktop builds,
   and Windows installer artifact.
+- Implemented 0.2.17 video list filtering in the working tree: server-side
+  video filters for keyword, author, link status, publish freshness, sync
+  freshness, metric bands, play ranges, sorting, filtered video CSV export,
+  desktop filter controls, and video issue chips.
 
 ## Follow-up Product Tasks
 
-1. Continue account/video productivity work after publishing 0.2.16.
-   - Add stronger video filters for missing links, metric ranges, freshness,
-     and recent changes.
+1. Continue account/video productivity work after publishing 0.2.17.
+   - Add batch-friendly video actions where safe, such as copy selected video
+     links or IDs.
    - Improve account list visibility for stale, failed, or incomplete accounts.
 
 2. Improve desktop navigation and feature discoverability for non-technical

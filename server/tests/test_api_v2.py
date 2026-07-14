@@ -455,17 +455,41 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertTrue(health.json()["data"]["ok"])
         db = self.Session()
         try:
+            now = datetime.now(timezone.utc)
             video = Video(
                 account_id=account_id,
                 video_id="123",
                 title="Test video",
                 play_count=200,
                 like_count=20,
-                published_at=datetime.now(timezone.utc),
+                published_at=now,
+                last_sync_at=now,
             )
             db.add(video)
             db.flush()
-            db.add(VideoStatsHistory(video_id=video.id, play_count=100, recorded_at=datetime.now(timezone.utc)))
+            db.add(VideoStatsHistory(video_id=video.id, play_count=100, recorded_at=now))
+            db.add(
+                Video(
+                    account_id=account_id,
+                    video_id="",
+                    title="Missing link low play",
+                    play_count=20,
+                    like_count=1,
+                    published_at=None,
+                    last_sync_at=None,
+                )
+            )
+            db.add(
+                Video(
+                    account_id=account_id,
+                    video_id="hot-video",
+                    title="Hot video",
+                    play_count=20_000,
+                    like_count=2_000,
+                    published_at=now - timedelta(days=10),
+                    last_sync_at=now - timedelta(days=8),
+                )
+            )
             alert = Alert(account_id=account_id, title="Play surge", message="Test", is_read=0)
             db.add(alert)
             db.add(Alert(account_id=account_id, level="error", title="Provider error", message="Test", is_read=0))
@@ -486,14 +510,33 @@ class ApiV2TestCase(unittest.TestCase):
         finally:
             db.close()
 
-        videos = self.client.get(f"/api/v2/videos?account_id={account_id}&page=1&per_page=1")
+        videos = self.client.get(f"/api/v2/videos?account_id={account_id}&q=Test&page=1&per_page=1")
         self.assertEqual(videos.status_code, 200)
         self.assertEqual(videos.json()["meta"]["total"], 1)
+        self.assertEqual(videos.json()["meta"]["filters"]["q"], "Test")
+        self.assertIn("plays_desc", videos.json()["meta"]["sort_options"])
+        self.assertIn("has_link", videos.json()["meta"]["options"])
+        missing_links = self.client.get(f"/api/v2/videos?account_id={account_id}&has_link=no")
+        self.assertEqual(missing_links.status_code, 200)
+        self.assertEqual(missing_links.json()["meta"]["total"], 1)
+        self.assertEqual(missing_links.json()["data"][0]["title"], "Missing link low play")
+        low_play = self.client.get(f"/api/v2/videos?account_id={account_id}&metric=low_plays")
+        self.assertEqual(low_play.json()["meta"]["total"], 1)
+        high_play = self.client.get(f"/api/v2/videos?account_id={account_id}&metric=high_plays")
+        self.assertEqual(high_play.json()["meta"]["total"], 1)
+        stale = self.client.get(f"/api/v2/videos?account_id={account_id}&sync=stale_7d")
+        self.assertEqual(stale.json()["meta"]["total"], 2)
+        sorted_videos = self.client.get(f"/api/v2/videos?account_id={account_id}&sort=plays_desc")
+        self.assertEqual(sorted_videos.json()["data"][0]["video_id"], "hot-video")
+        exported_videos = self.client.get(f"/api/v2/export/videos.csv?account_id={account_id}&metric=high_plays")
+        self.assertEqual(exported_videos.status_code, 200)
+        self.assertIn("hot-video", exported_videos.text)
+        self.assertNotIn("Missing link low play", exported_videos.text)
         detail = self.client.get(f"/api/v2/videos/{video_id}?history_per_page=1")
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["data"]["history_meta"]["total"], 1)
         account = self.client.get(f"/api/v2/accounts/{account_id}")
-        self.assertEqual(account.json()["data"]["videos_meta"]["total"], 1)
+        self.assertEqual(account.json()["data"]["videos_meta"]["total"], 3)
         self.assertEqual(account.json()["data"]["logs_meta"]["total"], 2)
 
         alerts = self.client.get("/api/v2/alerts?unread_only=true")

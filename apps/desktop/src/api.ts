@@ -150,10 +150,10 @@ export interface PageMeta {
   per_page: number;
   total: number;
   total_pages: number;
-  filters?: AccountFilters;
+  filters?: AccountFilters | VideoFilters;
   filter_totals?: DashboardTotals;
   sort_options?: Record<string, string>;
-  options?: DashboardOptions;
+  options?: Partial<DashboardOptions> & VideoFilterOptions;
   actions?: string[];
 }
 
@@ -351,6 +351,26 @@ export interface AccountFilters {
   quality?: string;
   status?: string;
   sort?: string;
+}
+
+export interface VideoFilters {
+  q?: string;
+  author?: string;
+  has_link?: string;
+  published?: string;
+  sync?: string;
+  metric?: string;
+  min_play?: string;
+  max_play?: string;
+  sort?: string;
+  account_id?: number;
+}
+
+export interface VideoFilterOptions {
+  has_link?: Record<string, string>;
+  published?: Record<string, string>;
+  sync?: Record<string, string>;
+  metric?: Record<string, string>;
 }
 
 export interface DataQualitySample {
@@ -592,8 +612,12 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
       });
       return requestText(`/api/v2/export/accounts.csv?${params.toString()}`, { method: "GET" });
     },
-    exportVideosCsv: (accountId?: number) => {
-      const suffix = accountId ? `?account_id=${accountId}` : "";
+    exportVideosCsv: (filters: VideoFilters = {}) => {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") params.set(key, String(value));
+      });
+      const suffix = params.toString() ? `?${params.toString()}` : "";
       return requestText(`/api/v2/export/videos.csv${suffix}`, { method: "GET" });
     },
     backups: () => request<BackupList>("/api/v2/backups", { method: "GET" }),
@@ -627,12 +651,14 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
       }),
     video: (videoId: number, historyPage = 1) =>
       request<Video>(`/api/v2/videos/${videoId}?history_page=${historyPage}`, { method: "GET" }),
-    videos: (page = 1, perPage = 50, accountId?: number) => {
+    videos: (page = 1, perPage = 50, filters: VideoFilters = {}) => {
       const params = new URLSearchParams({
         page: String(page),
         per_page: String(perPage)
       });
-      if (accountId) params.set("account_id", String(accountId));
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") params.set(key, String(value));
+      });
       return requestPage<Video>(`/api/v2/videos?${params.toString()}`, { method: "GET" });
     },
     alerts: (page = 1, perPage = 30, unreadOnly = false, level = "") =>

@@ -883,6 +883,25 @@ td small {
   text-decoration: underline;
 }
 
+.status-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: #fff4e8;
+  color: #9a4d00;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .inactive-row {
   opacity: 0.68;
   background: #f7f1ee;

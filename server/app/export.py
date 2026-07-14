@@ -52,7 +52,7 @@ def export_accounts_csv(db: Session, accounts: list[Account] | None = None) -> s
     return output.getvalue()
 
 
-def export_videos_csv(db: Session, account_id: int | None = None) -> str:
+def export_videos_csv(db: Session, account_id: int | None = None, videos: list[Video] | None = None) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -69,13 +69,16 @@ def export_videos_csv(db: Session, account_id: int | None = None) -> str:
             "last_sync",
         ]
     )
-    q = db.query(Video, Account).join(Account, Video.account_id == Account.id)
-    if account_id:
-        q = q.filter(Video.account_id == account_id)
-    for video, account in q.order_by(desc(Video.play_count)).all():
+    if videos is None:
+        q = db.query(Video).options(joinedload(Video.account))
+        if account_id:
+            q = q.filter(Video.account_id == account_id)
+        videos = q.order_by(desc(Video.play_count)).all()
+    for video in videos:
+        account = video.account
         writer.writerow(
             [
-                account.username,
+                account.username if account else "",
                 video.video_id,
                 video.title,
                 video.play_count,

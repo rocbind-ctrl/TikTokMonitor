@@ -91,12 +91,17 @@ https://github.com/netwebqi/TikTokMonitor
   paginated video loading through the existing V2 API, video metrics,
   open/copy/detail/author shortcut actions, dashboard quick entry, GitHub
   Actions desktop builds, and Windows installer artifact.
+- Implemented 0.2.17 video filtering in the working tree: server-side video
+  filters and sorting, filtered video CSV export, desktop video filter
+  controls, and issue chips for missing links, stale sync, and low/high play
+  states.
 
 ## Pending
 
 - Continue 0.2.x product work against the recovered replica feature set.
+- Validate, publish, and deploy 0.2.17 video filtering.
 - Use `docs/NEXT_TASKS.md` as the active replica feature parity checklist for
-  0.2.17 and later.
+  0.2.18 and later.
 - Keep deployment and release notes synchronized after each published version.
 - Plan the database migration path before the system becomes daily team
   infrastructure.

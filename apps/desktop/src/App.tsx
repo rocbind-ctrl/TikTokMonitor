@@ -40,7 +40,8 @@ import {
   Settings,
   Stats,
   SyncLog,
-  Video
+  Video,
+  VideoFilters
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
@@ -170,6 +171,7 @@ export default function App() {
   const [newUsername, setNewUsername] = useState("");
   const [newGroup, setNewGroup] = useState("");
   const [accountFilters, setAccountFilters] = useState<AccountFilters>({ sort: "plays_desc" });
+  const [videoFilters, setVideoFilters] = useState<VideoFilters>({ sort: "published_desc" });
   const [importText, setImportText] = useState("");
   const [importGroup, setImportGroup] = useState("");
   const [importPhone, setImportPhone] = useState("");
@@ -262,7 +264,7 @@ export default function App() {
         client.insights(),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
-        client.videos(videoPage, 50),
+        client.videos(videoPage, 50, videoFilters),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
         client.logs(logPage, 30, logFilters),
         client.auditLogs(auditPage, 30, auditFilters),
@@ -308,7 +310,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, serverUrl, unreadOnly, videoPage]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, serverUrl, unreadOnly, videoFilters, videoPage]);
 
   useEffect(() => {
     void loadData();
@@ -356,6 +358,12 @@ export default function App() {
   function updateAccountFilter(key: keyof AccountFilters, value: string) {
     setAccountFilters((current) => ({ ...current, [key]: value }));
     setAccountPage(1);
+  }
+
+  function updateVideoFilter(key: keyof VideoFilters, value: string) {
+    const nextValue = key === "min_play" || key === "max_play" ? value.replace(/[^\d]/g, "") : value;
+    setVideoFilters((current) => ({ ...current, [key]: nextValue }));
+    setVideoPage(1);
   }
 
   function updateLogFilter(key: keyof LogFilters, value: string) {
@@ -475,11 +483,11 @@ export default function App() {
     setMessage("");
     const startedAt = Date.now();
     const filename = `videos_${new Date().toISOString().slice(0, 10)}.csv`;
-    reportOperation("running", "导出视频 CSV", `正在导出 ${stats?.total_videos || 0} 条视频记录…`, { key: "export-videos" });
+    reportOperation("running", "导出视频 CSV", `正在按当前筛选导出 ${videosMeta.total || stats?.total_videos || 0} 条视频记录…`, { key: "export-videos" });
     try {
-      const csv = await api.exportVideosCsv();
+      const csv = await api.exportVideosCsv(videoFilters);
       downloadTextFile(filename, csv);
-      reportOperation("success", "视频 CSV 已导出", `文件已交给系统下载：${filename} · ${stats?.total_videos || 0} 条视频`, { key: "export-videos", startedAt });
+      reportOperation("success", "视频 CSV 已导出", `文件已交给系统下载：${filename} · ${videosMeta.total || stats?.total_videos || 0} 条视频`, { key: "export-videos", startedAt });
     } catch (error) {
       const detail = errorDetail(error, "导出视频失败");
       setMessage(detail);
@@ -1102,9 +1110,15 @@ export default function App() {
             videos={videos}
             meta={videosMeta}
             page={videoPage}
+            filters={videoFilters}
             stats={stats}
             busy={busy}
             authenticated={authenticated}
+            onFilterChange={updateVideoFilter}
+            onClearFilters={() => {
+              setVideoFilters({ sort: "published_desc" });
+              setVideoPage(1);
+            }}
             onPage={setVideoPage}
             onVideo={(id) => void openVideo(id)}
             onAccount={(id) => void openAccount(id)}
@@ -1377,7 +1391,10 @@ function Dashboard({
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
 }) {
-  const options = dashboard?.options || accountsMeta.options || { groups: [], phones: [], employees: [], sort_options: accountsMeta.sort_options || {} };
+  const options = dashboard?.options || accountsMeta.options || {};
+  const groups = options.groups || [];
+  const phones = options.phones || [];
+  const employees = options.employees || [];
   const sortOptions = options.sort_options || accountsMeta.sort_options || {};
   const progress = dashboard?.sync.progress;
   const syncBusy = Boolean(progress?.running || (dashboard?.sync.queue_size || 0) > 0);
@@ -1552,15 +1569,15 @@ function Dashboard({
             <input value={accountFilters.q || ""} onChange={(event) => onAccountFilterChange("q", event.target.value)} placeholder="搜用户名、品类、手机、员工、备注…" />
             <select className="filter-select" value={accountFilters.group || ""} onChange={(event) => onAccountFilterChange("group", event.target.value)}>
               <option value="">全部品类</option>
-              {options.groups.map((value) => <option value={value} key={value}>{value}</option>)}
+              {groups.map((value) => <option value={value} key={value}>{value}</option>)}
             </select>
             <select className="filter-select" value={accountFilters.phone || ""} onChange={(event) => onAccountFilterChange("phone", event.target.value)}>
               <option value="">全部手机</option>
-              {options.phones.map((value) => <option value={value} key={value}>{value}</option>)}
+              {phones.map((value) => <option value={value} key={value}>{value}</option>)}
             </select>
             <select className="filter-select" value={accountFilters.employee || ""} onChange={(event) => onAccountFilterChange("employee", event.target.value)}>
               <option value="">全部员工</option>
-              {options.employees.map((value) => <option value={value} key={value}>{value}</option>)}
+              {employees.map((value) => <option value={value} key={value}>{value}</option>)}
               <option value="未分配">未分配</option>
             </select>
             <select className="filter-select" value={accountFilters.post_today || ""} onChange={(event) => onAccountFilterChange("post_today", event.target.value)}>
@@ -1944,9 +1961,12 @@ function VideosPage({
   videos,
   meta,
   page,
+  filters,
   stats,
   busy,
   authenticated,
+  onFilterChange,
+  onClearFilters,
   onPage,
   onVideo,
   onAccount,
@@ -1957,9 +1977,12 @@ function VideosPage({
   videos: Video[];
   meta: PageMeta;
   page: number;
+  filters: VideoFilters;
   stats: Stats | null;
   busy: boolean;
   authenticated: boolean;
+  onFilterChange: (key: keyof VideoFilters, value: string) => void;
+  onClearFilters: () => void;
   onPage: (page: number) => void;
   onVideo: (id: number) => void;
   onAccount: (id: number) => void;
@@ -1973,6 +1996,34 @@ function VideosPage({
     if (!video.published_at) return false;
     return Date.now() - new Date(video.published_at).getTime() <= 24 * 60 * 60 * 1000;
   }).length;
+  const options = (meta.options || {}) as {
+    has_link?: Record<string, string>;
+    published?: Record<string, string>;
+    sync?: Record<string, string>;
+    metric?: Record<string, string>;
+  };
+  const sortOptions = meta.sort_options || {
+    published_desc: "发布时间从新到旧",
+    plays_desc: "播放量从高到低",
+    sync_desc: "最近同步从新到旧",
+  };
+  const hasActiveFilters = Boolean(
+    filters.q || filters.author || filters.has_link || filters.published || filters.sync || filters.metric || filters.min_play || filters.max_play || (filters.sort && filters.sort !== "published_desc")
+  );
+  const videoIssues = (video: Video) => {
+    const issues: string[] = [];
+    if (!video.video_id || !videoUrl(video)) issues.push("缺链接");
+    if (!video.account) issues.push("无作者");
+    if (!video.last_sync_at) {
+      issues.push("未同步");
+    } else if (Date.now() - new Date(video.last_sync_at).getTime() > 7 * 24 * 60 * 60 * 1000) {
+      issues.push("同步过期");
+    }
+    if ((video.play_count || 0) <= 0) issues.push("无播放");
+    else if ((video.play_count || 0) < 100) issues.push("低播放");
+    else if ((video.play_count || 0) >= 10000) issues.push("高播放");
+    return issues;
+  };
 
   return (
     <section className="detail-layout">
@@ -1990,7 +2041,7 @@ function VideosPage({
         </div>
         <div className="quick-nav-actions">
           <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onExportVideos}>
-            <FileUp aria-hidden="true" />导出视频 CSV
+            <FileUp aria-hidden="true" />导出当前筛选 CSV
           </button>
         </div>
       </section>
@@ -1999,6 +2050,32 @@ function VideosPage({
         <div className="panel-head">
           <h2>全部视频</h2>
           <span>{meta.total} 条</span>
+        </div>
+        <div className="account-filter-grid">
+          <input value={filters.q || ""} onChange={(event) => onFilterChange("q", event.target.value)} placeholder="搜索标题、视频 ID、作者" />
+          <input value={filters.author || ""} onChange={(event) => onFilterChange("author", event.target.value)} placeholder="作者用户名或昵称" />
+          <select className="filter-select" value={filters.has_link || ""} onChange={(event) => onFilterChange("has_link", event.target.value)}>
+            <option value="">链接状态：全部</option>
+            {Object.entries(options.has_link || {}).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+          </select>
+          <select className="filter-select" value={filters.published || ""} onChange={(event) => onFilterChange("published", event.target.value)}>
+            <option value="">发布时间：全部</option>
+            {Object.entries(options.published || {}).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+          </select>
+          <select className="filter-select" value={filters.sync || ""} onChange={(event) => onFilterChange("sync", event.target.value)}>
+            <option value="">同步状态：全部</option>
+            {Object.entries(options.sync || {}).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+          </select>
+          <select className="filter-select" value={filters.metric || ""} onChange={(event) => onFilterChange("metric", event.target.value)}>
+            <option value="">指标状态：全部</option>
+            {Object.entries(options.metric || {}).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+          </select>
+          <input value={filters.min_play || ""} onChange={(event) => onFilterChange("min_play", event.target.value)} placeholder="最低播放" inputMode="numeric" />
+          <input value={filters.max_play || ""} onChange={(event) => onFilterChange("max_play", event.target.value)} placeholder="最高播放" inputMode="numeric" />
+          <select className="filter-select" value={filters.sort || "published_desc"} onChange={(event) => onFilterChange("sort", event.target.value)}>
+            {Object.entries(sortOptions).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+          </select>
+          <button className="ghost-light-button" disabled={!hasActiveFilters} onClick={onClearFilters}>清除筛选</button>
         </div>
         <div className="table-wrap">
           <table>
@@ -2022,6 +2099,9 @@ function VideosPage({
                   <tr key={video.id}>
                     <td>
                       <button className="link-button" onClick={() => onVideo(video.id)}>{video.title || "无标题视频"}</button>
+                      <div className="status-chip-row">
+                        {videoIssues(video).map((issue) => <span className="status-chip" key={issue}>{issue}</span>)}
+                      </div>
                       <div className="mini-action-row">
                         <button onClick={() => onVideo(video.id)}>详情</button>
                         {tikTokUrl ? <a href={tikTokUrl} target="_blank" rel="noreferrer">TikTok</a> : null}

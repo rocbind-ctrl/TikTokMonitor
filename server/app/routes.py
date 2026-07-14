@@ -446,6 +446,39 @@ def _save_config(config: dict) -> None:
 
 V2_MAX_PAGE_SIZE = 200
 
+VIDEO_SORT_OPTIONS = {
+    "published_desc": "发布时间从新到旧",
+    "published_asc": "发布时间从旧到新",
+    "plays_desc": "播放量从高到低",
+    "plays_asc": "播放量从低到高",
+    "likes_desc": "点赞从高到低",
+    "comments_desc": "评论从高到低",
+    "shares_desc": "分享从高到低",
+    "sync_desc": "最近同步从新到旧",
+    "sync_asc": "最近同步从旧到新",
+}
+
+VIDEO_FILTER_OPTIONS = {
+    "has_link": {"yes": "可打开 TikTok", "no": "缺少链接"},
+    "published": {
+        "recent_24h": "24 小时内发布",
+        "last_7d": "7 天内发布",
+        "older_7d": "超过 7 天",
+        "missing": "缺少发布时间",
+    },
+    "sync": {
+        "recent_24h": "24 小时内同步",
+        "stale_24h": "超过 24 小时未同步",
+        "stale_7d": "超过 7 天未同步",
+        "missing": "缺少同步时间",
+    },
+    "metric": {
+        "no_plays": "无播放",
+        "low_plays": "低播放（< 100）",
+        "high_plays": "高播放（>= 10,000）",
+    },
+}
+
 
 def _v2_success(data, *, meta: dict | None = None, status_code: int = 200):
     payload = {"ok": True, "data": data, "error": None}
@@ -887,9 +920,160 @@ def api_v2_export_accounts(
     return _csv_response(content, f"accounts_{total}.csv")
 
 
+def _clean_video_filters(
+    *,
+    q: str = "",
+    author: str = "",
+    has_link: str = "",
+    published: str = "",
+    sync: str = "",
+    metric: str = "",
+    min_play: int | None = None,
+    max_play: int | None = None,
+    sort: str = "published_desc",
+) -> dict:
+    has_link = has_link.strip().lower()
+    published = published.strip().lower()
+    sync = sync.strip().lower()
+    metric = metric.strip().lower()
+    sort = sort.strip().lower()
+    if has_link not in VIDEO_FILTER_OPTIONS["has_link"]:
+        has_link = ""
+    if published not in VIDEO_FILTER_OPTIONS["published"]:
+        published = ""
+    if sync not in VIDEO_FILTER_OPTIONS["sync"]:
+        sync = ""
+    if metric not in VIDEO_FILTER_OPTIONS["metric"]:
+        metric = ""
+    if sort not in VIDEO_SORT_OPTIONS:
+        sort = "published_desc"
+    if min_play is not None and min_play < 0:
+        min_play = 0
+    if max_play is not None and max_play < 0:
+        max_play = None
+    if min_play is not None and max_play is not None and min_play > max_play:
+        min_play, max_play = max_play, min_play
+    return {
+        "q": q.strip(),
+        "author": author.strip().lstrip("@"),
+        "has_link": has_link,
+        "published": published,
+        "sync": sync,
+        "metric": metric,
+        "min_play": min_play,
+        "max_play": max_play,
+        "sort": sort,
+    }
+
+
+def _apply_video_filters(query, filters: dict):
+    search = filters["q"]
+    author = filters["author"]
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            (Video.title.ilike(like))
+            | (Video.video_id.ilike(like))
+            | (Account.username.ilike(like))
+            | (Account.nickname.ilike(like))
+        )
+    if author:
+        like = f"%{author}%"
+        query = query.filter((Account.username.ilike(like)) | (Account.nickname.ilike(like)))
+
+    if filters["has_link"] == "yes":
+        query = query.filter(Video.video_id != "", Account.username != "")
+    elif filters["has_link"] == "no":
+        query = query.filter((Video.video_id == "") | (Account.username == "") | (Account.username == None))  # noqa: E711
+
+    now = datetime.now(timezone.utc)
+    if filters["published"] == "recent_24h":
+        query = query.filter(Video.published_at >= now - timedelta(hours=24))
+    elif filters["published"] == "last_7d":
+        query = query.filter(Video.published_at >= now - timedelta(days=7))
+    elif filters["published"] == "older_7d":
+        query = query.filter(Video.published_at < now - timedelta(days=7))
+    elif filters["published"] == "missing":
+        query = query.filter(Video.published_at == None)  # noqa: E711
+
+    if filters["sync"] == "recent_24h":
+        query = query.filter(Video.last_sync_at >= now - timedelta(hours=24))
+    elif filters["sync"] == "stale_24h":
+        query = query.filter((Video.last_sync_at == None) | (Video.last_sync_at < now - timedelta(hours=24)))  # noqa: E711
+    elif filters["sync"] == "stale_7d":
+        query = query.filter((Video.last_sync_at == None) | (Video.last_sync_at < now - timedelta(days=7)))  # noqa: E711
+    elif filters["sync"] == "missing":
+        query = query.filter(Video.last_sync_at == None)  # noqa: E711
+
+    if filters["metric"] == "no_plays":
+        query = query.filter(Video.play_count <= 0)
+    elif filters["metric"] == "low_plays":
+        query = query.filter(Video.play_count < 100)
+    elif filters["metric"] == "high_plays":
+        query = query.filter(Video.play_count >= 10_000)
+
+    if filters["min_play"] is not None:
+        query = query.filter(Video.play_count >= filters["min_play"])
+    if filters["max_play"] is not None:
+        query = query.filter(Video.play_count <= filters["max_play"])
+    return query
+
+
+def _order_video_query(query, sort: str):
+    if sort == "published_asc":
+        return query.order_by(Video.published_at.asc(), Video.id.asc())
+    if sort == "plays_desc":
+        return query.order_by(desc(Video.play_count), desc(Video.id))
+    if sort == "plays_asc":
+        return query.order_by(Video.play_count.asc(), Video.id.asc())
+    if sort == "likes_desc":
+        return query.order_by(desc(Video.like_count), desc(Video.id))
+    if sort == "comments_desc":
+        return query.order_by(desc(Video.comment_count), desc(Video.id))
+    if sort == "shares_desc":
+        return query.order_by(desc(Video.share_count), desc(Video.id))
+    if sort == "sync_desc":
+        return query.order_by(desc(Video.last_sync_at), desc(Video.id))
+    if sort == "sync_asc":
+        return query.order_by(Video.last_sync_at.asc(), Video.id.asc())
+    return query.order_by(desc(Video.published_at), desc(Video.id))
+
+
+def _video_query(db: Session, account_id: int | None, filters: dict):
+    query = db.query(Video).options(joinedload(Video.account)).outerjoin(Account, Video.account_id == Account.id)
+    if account_id is not None:
+        query = query.filter(Video.account_id == account_id)
+    query = _apply_video_filters(query, filters)
+    return _order_video_query(query, filters["sort"])
+
+
 @app.get("/api/v2/export/videos.csv")
-def api_v2_export_videos(account_id: int | None = None, db: Session = Depends(get_db)):
-    content = export_videos_csv(db, account_id=account_id)
+def api_v2_export_videos(
+    account_id: int | None = None,
+    q: str = "",
+    author: str = "",
+    has_link: str = "",
+    published: str = "",
+    sync: str = "",
+    metric: str = "",
+    min_play: int | None = None,
+    max_play: int | None = None,
+    sort: str = "published_desc",
+    db: Session = Depends(get_db),
+):
+    filters = _clean_video_filters(
+        q=q,
+        author=author,
+        has_link=has_link,
+        published=published,
+        sync=sync,
+        metric=metric,
+        min_play=min_play,
+        max_play=max_play,
+        sort=sort,
+    )
+    videos = _video_query(db, account_id, filters).all()
+    content = export_videos_csv(db, account_id=account_id, videos=videos)
     suffix = f"account_{account_id}" if account_id else "all"
     return _csv_response(content, f"videos_{suffix}.csv")
 
@@ -1170,12 +1354,37 @@ def api_v2_delete_account(account_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v2/videos")
-def api_v2_list_videos(account_id: int | None = None, page: int = 1, per_page: int = 50, db: Session = Depends(get_db)):
-    query = db.query(Video).options(joinedload(Video.account))
-    if account_id is not None:
-        query = query.filter(Video.account_id == account_id)
-    query = query.order_by(desc(Video.published_at), desc(Video.id))
+def api_v2_list_videos(
+    account_id: int | None = None,
+    page: int = 1,
+    per_page: int = 50,
+    q: str = "",
+    author: str = "",
+    has_link: str = "",
+    published: str = "",
+    sync: str = "",
+    metric: str = "",
+    min_play: int | None = None,
+    max_play: int | None = None,
+    sort: str = "published_desc",
+    db: Session = Depends(get_db),
+):
+    filters = _clean_video_filters(
+        q=q,
+        author=author,
+        has_link=has_link,
+        published=published,
+        sync=sync,
+        metric=metric,
+        min_play=min_play,
+        max_play=max_play,
+        sort=sort,
+    )
+    query = _video_query(db, account_id, filters)
     rows, meta = _v2_page(query, page, per_page)
+    meta["filters"] = {"account_id": account_id, **filters}
+    meta["sort_options"] = VIDEO_SORT_OPTIONS
+    meta["options"] = VIDEO_FILTER_OPTIONS
     return _v2_success([_video_payload(video) for video in rows], meta=meta)
 
 
