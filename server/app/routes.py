@@ -31,6 +31,7 @@ from app.analytics import (
     format_tk_time,
     format_video_time,
     is_in_tk_day,
+    period_insights,
     today_publish_summary_db,
     top_play_gainers,
     unread_alerts,
@@ -41,7 +42,7 @@ from app.analytics import (
 )
 from app.config import get_alert_settings, get_monitor_settings, get_security_settings, load_config
 from app.database import Account, Alert, AuditLog, SyncLog, Video, VideoStatsHistory, get_db, init_db
-from app.export import export_accounts_csv, export_videos_csv
+from app.export import export_accounts_csv, export_insights_csv, export_videos_csv
 from app.groups import (
     ACCOUNT_QUALITY_FILTERS,
     ACCOUNT_SORT_OPTIONS,
@@ -703,6 +704,43 @@ def _gainer_payload(item: dict) -> dict:
     }
 
 
+def _account_performance_payload(row: dict) -> dict:
+    return {
+        "account": _account_ref_payload(row["account"]),
+        "plays_delta": int(row.get("plays_delta") or 0),
+        "previous_plays_delta": int(row.get("previous_plays_delta") or 0),
+        "follower_delta": int(row.get("follower_delta") or 0),
+        "previous_follower_delta": int(row.get("previous_follower_delta") or 0),
+        "engagement": row.get("engagement") or 0,
+        "has_history": bool(row.get("has_history")),
+        "has_comparison": bool(row.get("has_comparison")),
+        "baseline_at": _iso(row.get("baseline_at")),
+    }
+
+
+def _video_performance_payload(row: dict) -> dict:
+    return {
+        "video": _video_payload(row["video"]),
+        "account": _account_ref_payload(row["account"]),
+        "plays_delta": int(row.get("plays_delta") or 0),
+        "previous_plays_delta": int(row.get("previous_plays_delta") or 0),
+        "engagement": row.get("engagement") or 0,
+        "has_history": bool(row.get("has_history")),
+        "has_comparison": bool(row.get("has_comparison")),
+        "baseline_at": _iso(row.get("baseline_at")),
+    }
+
+
+def _period_insights_payload(raw: dict) -> dict:
+    return {
+        "period": {key: _iso(value) if key.endswith("_start") or key.endswith("_end") else value for key, value in raw["period"].items()},
+        "comparison": raw["comparison"],
+        "coverage": raw["coverage"],
+        "accounts": {key: [_account_performance_payload(row) for row in rows] for key, rows in raw["accounts"].items()},
+        "videos": {key: [_video_performance_payload(row) for row in rows] for key, rows in raw["videos"].items()},
+    }
+
+
 def _account_filters_meta(
     *,
     group: str,
@@ -841,6 +879,7 @@ def api_v2_insights(days: int = 7, limit: int = 10, db: Session = Depends(get_db
     rankings = account_rankings(db, limit=limit)
     anomalies = global_anomalies(db, limit=limit)
     gainers = top_play_gainers(db, limit=limit, hours=24)
+    period_payload = _period_insights_payload(period_insights(db, days=days, limit=limit))
     alerts = (
         db.query(Alert)
         .filter(Alert.is_read == 0)
@@ -850,6 +889,7 @@ def api_v2_insights(days: int = 7, limit: int = 10, db: Session = Depends(get_db
     )
     return _v2_success(
         {
+            **period_payload,
             "summary": {
                 "ranked_accounts": len(rankings),
                 "anomalies": len(anomalies),
@@ -863,6 +903,21 @@ def api_v2_insights(days: int = 7, limit: int = 10, db: Session = Depends(get_db
             "gainers": [_gainer_payload(item) for item in gainers],
             "alerts": [_alert_payload(alert) for alert in alerts],
         }
+    )
+
+
+@app.get("/api/v2/export/insights.csv")
+def api_v2_export_insights(days: int = 7, limit: int = 50, section: str = "accounts", db: Session = Depends(get_db)):
+    days = min(30, max(1, days))
+    limit = min(50, max(1, limit))
+    section = section if section in {"accounts", "videos", "anomalies"} else "accounts"
+    payload = _period_insights_payload(period_insights(db, days=days, limit=limit))
+    payload["anomalies"] = [_anomaly_payload(item) for item in global_anomalies(db, limit=limit)]
+    csv_text = export_insights_csv(payload, section=section)
+    return Response(
+        content="\ufeff" + csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="insights_{section}_{days}d.csv"'},
     )
 
 

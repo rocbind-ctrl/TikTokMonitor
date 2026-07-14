@@ -420,6 +420,24 @@ h2 {
   padding: 16px;
 }
 
+.metric-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metric-button:hover {
+  border-color: #8db8bf;
+  background: #f7fbfb;
+}
+
+.metric-button:focus-visible {
+  outline: 3px solid rgba(12, 110, 126, 0.22);
+  outline-offset: 2px;
+}
+
 .metric-card span,
 .metric-card strong,
 .metric-card small {
@@ -774,6 +792,78 @@ h2 {
   flex-wrap: wrap;
 }
 
+.analysis-toolbar {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto minmax(280px, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.analysis-toolbar h2,
+.analysis-toolbar span {
+  display: block;
+}
+
+.analysis-toolbar .panel-actions {
+  flex: none;
+}
+
+.segmented-control {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(58px, 1fr));
+  min-width: 190px;
+  overflow: hidden;
+  border: 1px solid #cad7da;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.segmented-control button {
+  min-height: 36px;
+  border: 0;
+  border-right: 1px solid #cad7da;
+  color: #405058;
+  background: transparent;
+}
+
+.segmented-control button:last-child {
+  border-right: 0;
+}
+
+.segmented-control button.active {
+  color: #ffffff;
+  background: #0c6e7e;
+}
+
+.coverage-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: #f0c690;
+  background: #fff8ed;
+}
+
+.coverage-warning svg {
+  width: 22px;
+  min-width: 22px;
+  color: #a75b08;
+}
+
+.coverage-warning strong,
+.coverage-warning span {
+  display: block;
+}
+
+.coverage-warning span {
+  margin-top: 3px;
+  color: #6b562f;
+  font-size: 13px;
+}
+
+.analysis-table {
+  min-width: 880px;
+}
+
 .trend-chart {
   display: grid;
   gap: 8px;
@@ -1077,6 +1167,11 @@ td small {
 
 .delta-up {
   color: #0b5d41;
+  font-weight: 800;
+}
+
+.delta-down {
+  color: #a63d2f;
   font-weight: 800;
 }
 
@@ -1467,6 +1562,14 @@ td small {
   .form-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-toolbar .panel-actions {
+    justify-content: flex-start;
   }
 
   .topbar {

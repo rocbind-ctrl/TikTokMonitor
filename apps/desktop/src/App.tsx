@@ -47,6 +47,7 @@ import {
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
 type View = "dashboard" | "quality" | "insights" | "videos" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings" | "help";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
+type SavedInsightView = { id: string; name: string; days: number };
 type OperationState = {
   status: "running" | "success" | "error";
   title: string;
@@ -57,6 +58,8 @@ type OperationState = {
 };
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
+const SAVED_INSIGHT_VIEWS_KEY = "tiktokmonitor.savedInsightViews";
+const INSIGHT_DAYS_KEY = "tiktokmonitor.insightDays";
 const OPERATION_HISTORY_KEY = "tiktokmonitor.operationHistory";
 const ACCOUNT_QUALITY_FALLBACK_LABELS: Record<string, string> = {
   stale_sync: "同步过期",
@@ -196,6 +199,18 @@ export default function App() {
       return [];
     }
   });
+  const [insightDays, setInsightDays] = useState(() => {
+    const saved = Number(localStorage.getItem(INSIGHT_DAYS_KEY) || 7);
+    return [7, 14, 30].includes(saved) ? saved : 7;
+  });
+  const [savedInsightViews, setSavedInsightViews] = useState<SavedInsightView[]>(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_INSIGHT_VIEWS_KEY);
+      return raw ? JSON.parse(raw) as SavedInsightView[] : [];
+    } catch {
+      return [];
+    }
+  });
 
   const api = useMemo(() => createApiClient(serverUrl, sessionToken), [serverUrl, sessionToken]);
   const authenticated = session ? session.authenticated || !session.auth_enabled : false;
@@ -268,7 +283,7 @@ export default function App() {
       const [nextDashboard, nextDataQuality, nextInsights, nextStats, nextAccounts, nextVideos, nextAlerts, nextLogs, nextAuditLogs, nextProviders, nextBackups] = await Promise.all([
         client.dashboard(),
         client.dataQuality(),
-        client.insights(),
+        client.insights(insightDays),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
         client.videos(videoPage, 50, videoFilters),
@@ -317,7 +332,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, serverUrl, unreadOnly, videoFilters, videoPage]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, insightDays, logFilters, logPage, serverUrl, unreadOnly, videoFilters, videoPage]);
 
   useEffect(() => {
     void loadData();
@@ -410,6 +425,35 @@ export default function App() {
     persistSavedAccountFilters(savedAccountFilters.filter((item) => item.id !== filterId));
   }
 
+  function persistSavedInsightViews(next: SavedInsightView[]) {
+    setSavedInsightViews(next);
+    localStorage.setItem(SAVED_INSIGHT_VIEWS_KEY, JSON.stringify(next));
+  }
+
+  function changeInsightDays(days: number) {
+    if (![7, 14, 30].includes(days)) return;
+    localStorage.setItem(INSIGHT_DAYS_KEY, String(days));
+    setInsights(null);
+    setInsightDays(days);
+  }
+
+  function saveCurrentInsightView() {
+    const name = window.prompt("给当前分析视图取个名字", `${insightDays} 天分析`);
+    if (!name?.trim()) return;
+    const view: SavedInsightView = { id: `${Date.now()}`, name: name.trim(), days: insightDays };
+    persistSavedInsightViews([view, ...savedInsightViews].slice(0, 8));
+    reportOperation("success", "分析视图已保存", `${view.name} · ${view.days} 天周期`);
+  }
+
+  function applySavedInsightView(saved: SavedInsightView) {
+    changeInsightDays(saved.days);
+    reportOperation("success", "已应用分析视图", `${saved.name} · ${saved.days} 天周期`);
+  }
+
+  function deleteSavedInsightView(viewId: string) {
+    persistSavedInsightViews(savedInsightViews.filter((item) => item.id !== viewId));
+  }
+
   function downloadBlobFile(filename: string, blob: Blob) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -499,6 +543,26 @@ export default function App() {
       const detail = errorDetail(error, "导出视频失败");
       setMessage(detail);
       reportOperation("error", "导出视频失败", detail, { key: "export-videos", startedAt });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportInsightsCsv(section: "accounts" | "videos" | "anomalies") {
+    setBusy(true);
+    setMessage("");
+    const startedAt = Date.now();
+    const labels = { accounts: "账号表现", videos: "视频表现", anomalies: "异常结果" };
+    const filename = `insights_${section}_${insightDays}d_${new Date().toISOString().slice(0, 10)}.csv`;
+    reportOperation("running", "导出分析 CSV", `正在导出 ${insightDays} 天${labels[section]}…`, { key: "export-insights" });
+    try {
+      const csv = await api.exportInsightsCsv(insightDays, section);
+      downloadTextFile(filename, csv);
+      reportOperation("success", "分析 CSV 已导出", `文件已交给系统下载：${filename}`, { key: "export-insights", startedAt });
+    } catch (error) {
+      const detail = errorDetail(error, "导出分析失败");
+      setMessage(detail);
+      reportOperation("error", "导出分析失败", detail, { key: "export-insights", startedAt });
     } finally {
       setBusy(false);
     }
@@ -1111,8 +1175,30 @@ export default function App() {
         {view === "insights" ? (
           <InsightsPage
             insights={insights}
+            days={insightDays}
+            savedViews={savedInsightViews}
+            busy={busy}
+            authenticated={authenticated}
+            onDaysChange={changeInsightDays}
+            onSaveView={saveCurrentInsightView}
+            onApplyView={applySavedInsightView}
+            onDeleteView={deleteSavedInsightView}
+            onExport={(section) => void exportInsightsCsv(section)}
             onAccount={(id) => void openAccount(id)}
             onVideo={(id) => void openVideo(id)}
+            onAccounts={(sort) => {
+              setAccountFilters({ status: "active", sort });
+              setAccountPage(1);
+              setView("dashboard");
+              reportOperation("success", "已打开账号列表", "已按分析结果对应的指标排序。");
+            }}
+            onVideos={(sort) => {
+              setVideoFilters({ sort });
+              setVideoPage(1);
+              setView("videos");
+              reportOperation("success", "已打开视频列表", "已按分析结果对应的指标排序。");
+            }}
+            onAlerts={() => setView("alerts")}
           />
         ) : null}
         {view === "videos" ? (
@@ -1445,17 +1531,17 @@ function Dashboard({
   return (
     <>
       <section className="metric-grid">
-        <Metric icon={<Users />} label="账号" value={stats?.total_accounts} detail={`${stats?.active_accounts || 0} 个启用`} />
-        <Metric icon={<Activity />} label="视频" value={stats?.total_videos} detail={`${compactNumber(stats?.total_plays)} 播放`} />
-        <Metric icon={<AlertTriangle />} label="未读告警" value={stats?.unread_alerts} detail={`最近同步 ${formatDate(stats?.last_sync_at)}`} />
+        <Metric icon={<Users />} label="账号" value={stats?.total_accounts} detail={`${stats?.active_accounts || 0} 个启用`} onClick={() => onAccountFilterChange("status", "active")} />
+        <Metric icon={<Activity />} label="视频" value={stats?.total_videos} detail={`${compactNumber(stats?.total_plays)} 播放`} onClick={() => onNavigate("videos")} />
+        <Metric icon={<AlertTriangle />} label="未读告警" value={stats?.unread_alerts} detail={`最近同步 ${formatDate(stats?.last_sync_at)}`} onClick={() => onNavigate("alerts")} />
       </section>
 
       {dashboard ? (
         <>
           <section className="metric-grid today-grid">
-            <Metric icon={<VideoIcon />} label="今日新发" value={dashboard.today.total_videos} detail={`${dashboard.today.date_label} · ${dashboard.today.tz_label}`} />
-            <Metric icon={<Activity />} label="今日增播" value={dashboard.today.plays_increase} detail={`新发播放 ${compactNumber(dashboard.today.total_plays)}`} />
-            <Metric icon={<CheckCircle2 />} label="今日已发" value={dashboard.today.posted_accounts} detail={`未发 ${dashboard.today.not_posted_accounts} 个账号`} />
+            <Metric icon={<VideoIcon />} label="今日新发" value={dashboard.today.total_videos} detail={`${dashboard.today.date_label} · ${dashboard.today.tz_label}`} onClick={() => onNavigate("videos")} />
+            <Metric icon={<Activity />} label="今日增播" value={dashboard.today.plays_increase} detail={`新发播放 ${compactNumber(dashboard.today.total_plays)}`} onClick={() => onAccountFilterChange("sort", "today_gain_desc")} />
+            <Metric icon={<CheckCircle2 />} label="今日已发" value={dashboard.today.posted_accounts} detail={`未发 ${dashboard.today.not_posted_accounts} 个账号`} onClick={() => onAccountFilterChange("post_today", "yes")} />
           </section>
 
           {syncBusy ? (
@@ -1779,22 +1865,93 @@ function Dashboard({
 
 function InsightsPage({
   insights,
+  days,
+  savedViews,
+  busy,
+  authenticated,
+  onDaysChange,
+  onSaveView,
+  onApplyView,
+  onDeleteView,
+  onExport,
   onAccount,
-  onVideo
+  onVideo,
+  onAccounts,
+  onVideos,
+  onAlerts
 }: {
   insights: InsightsData | null;
+  days: number;
+  savedViews: SavedInsightView[];
+  busy: boolean;
+  authenticated: boolean;
+  onDaysChange: (days: number) => void;
+  onSaveView: () => void;
+  onApplyView: (saved: SavedInsightView) => void;
+  onDeleteView: (viewId: string) => void;
+  onExport: (section: "accounts" | "videos" | "anomalies") => void;
   onAccount: (id: number) => void;
   onVideo: (id: number) => void;
+  onAccounts: (sort: string) => void;
+  onVideos: (sort: string) => void;
+  onAlerts: () => void;
 }) {
   if (!insights) return <p className="empty-state">正在加载数据分析…</p>;
+  const comparison = insights.comparison;
+  const coverage = insights.coverage;
+  const accountPerformance = insights.accounts;
+  const videoPerformance = insights.videos;
+  const comparableRatio = coverage?.total_accounts
+    ? Math.round((coverage.comparable_accounts / coverage.total_accounts) * 100)
+    : 0;
+  const comparisonText = (metric: typeof comparison extends undefined ? never : NonNullable<typeof comparison>["plays"]) => {
+    if (!metric?.available) return "历史快照不足，暂不能与上一周期比较";
+    const rate = metric.rate === null ? "基数为 0" : `环比 ${metric.rate > 0 ? "+" : ""}${metric.rate}%`;
+    return `上期 ${compactNumber(metric.previous)} · ${rate}`;
+  };
   return (
     <section className="detail-layout">
-      <section className="metric-grid detail-metrics">
-        <Metric icon={<Activity />} label="分析周期" value={insights.summary.days} detail="最近天数" />
-        <Metric icon={<Users />} label="健康排行" value={insights.summary.ranked_accounts} detail="已参与评分账号" />
-        <Metric icon={<AlertTriangle />} label="异常检测" value={insights.summary.anomalies} detail={`未读告警 ${insights.summary.unread_alerts}`} />
-        <Metric icon={<VideoIcon />} label="增长视频" value={insights.summary.gainers} detail="24h 播放增长 TOP" />
+      <section className="panel analysis-toolbar">
+        <div>
+          <h2>分析周期</h2>
+          <span>{insights.period?.timezone || "按服务器配置时区"} · 与紧邻的上一周期比较</span>
+        </div>
+        <div className="segmented-control" aria-label="分析周期">
+          {[7, 14, 30].map((value) => <button className={days === value ? "active" : ""} key={value} disabled={busy} onClick={() => onDaysChange(value)}>{value} 天</button>)}
+        </div>
+        <div className="panel-actions">
+          <button className="ghost-light-button" disabled={!authenticated} onClick={onSaveView}>保存视图</button>
+          <button className="ghost-light-button" disabled={busy || !authenticated} onClick={() => onExport("accounts")}>导出账号</button>
+          <button className="ghost-light-button" disabled={busy || !authenticated} onClick={() => onExport("videos")}>导出视频</button>
+          <button className="ghost-light-button" disabled={busy || !authenticated} onClick={() => onExport("anomalies")}>导出异常</button>
+        </div>
       </section>
+
+      {savedViews.length ? (
+        <div className="saved-filter-row">
+          <span>已保存分析</span>
+          {savedViews.map((saved) => (
+            <span className="saved-filter-chip" key={saved.id}>
+              <button onClick={() => onApplyView(saved)}>{saved.name} · {saved.days} 天</button>
+              <button aria-label={`删除分析视图 ${saved.name}`} onClick={() => onDeleteView(saved.id)}>×</button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<Activity />} label="本期增播" value={comparison?.plays.current || 0} detail={comparison?.plays ? comparisonText(comparison.plays) : "升级服务端后显示周期对比"} onClick={() => onAccounts("gain_desc")} />
+        <Metric icon={<Users />} label="本期增粉" value={comparison?.followers.current || 0} detail={comparison?.followers ? comparisonText(comparison.followers) : "升级服务端后显示周期对比"} onClick={() => onAccounts("followers_desc")} />
+        <Metric icon={<CheckCircle2 />} label="可比账号" value={coverage?.comparable_accounts || 0} detail={`${comparableRatio}% 数据覆盖率`} onClick={() => onAccounts("gain_desc")} />
+        <Metric icon={<AlertTriangle />} label="异常检测" value={insights.summary.anomalies} detail={`未读告警 ${insights.summary.unread_alerts}`} onClick={onAlerts} />
+      </section>
+
+      {coverage && comparableRatio < 60 ? (
+        <section className="panel coverage-warning">
+          <AlertTriangle aria-hidden="true" />
+          <div><strong>周期比较样本不足</strong><span>仅 {coverage.comparable_accounts}/{coverage.total_accounts} 个账号覆盖本期和上一周期。先完成更多同步，再依据环比数据做判断。</span></div>
+        </section>
+      ) : null}
 
       {insights.trend.labels.length ? (
         <section className="panel">
@@ -1811,45 +1968,97 @@ function InsightsPage({
         <section className="panel"><p className="empty-state">暂无趋势数据；完成多次同步后会生成趋势图。</p></section>
       )}
 
+      <section className="panel">
+        <div className="panel-head"><div><h2>账号周期表现</h2><span>本期与上一周期使用相同长度</span></div><button className="text-button" onClick={() => onAccounts("gain_desc")}>查看账号列表</button></div>
+        <div className="table-wrap">
+          <table className="compact-table analysis-table">
+            <thead><tr><th>#</th><th>账号</th><th>本期播放</th><th>上期播放</th><th>本期粉丝</th><th>上期粉丝</th><th>互动率</th><th>数据基准</th></tr></thead>
+            <tbody>
+              {(accountPerformance?.plays_growth || []).map((row, index) => (
+                <tr key={row.account.id}>
+                  <td>{index + 1}</td>
+                  <td><button className="link-button" onClick={() => onAccount(row.account.id)}>@{row.account.username}</button><small>{row.account.group || row.account.employee || "未标注"}</small></td>
+                  <td className={row.plays_delta >= 0 ? "delta-up" : "delta-down"}>{signedNumber(row.plays_delta)}</td>
+                  <td>{row.has_comparison ? signedNumber(row.previous_plays_delta) : "样本不足"}</td>
+                  <td>{signedNumber(row.follower_delta)}</td>
+                  <td>{row.has_comparison ? signedNumber(row.previous_follower_delta) : "样本不足"}</td>
+                  <td>{row.engagement}%</td>
+                  <td>{row.has_comparison ? formatDate(row.baseline_at) : "仅本期"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!accountPerformance?.plays_growth.length ? <p className="empty-state">暂无可分析的账号历史；至少跨两个同步时间点后会显示本期表现。</p> : null}
+      </section>
+
       <section className="analytics-grid">
         <section className="panel">
-          <div className="panel-head"><h2>24h 播放增长 TOP</h2><span>{insights.gainers.length} 条</span></div>
+          <div className="panel-head"><h2>粉丝增长排行</h2><span>{accountPerformance?.follower_growth.length || 0} 个账号</span></div>
           <div className="stack-list">
-            {insights.gainers.map((item) => (
-              <article className="list-item" key={item.video.id}>
-                <button className="list-action" onClick={() => onVideo(item.video.id)}>
-                  <strong>{item.video.title || "无标题视频"}</strong>
-                  <span>@{item.account.username} · 当前 {compactNumber(item.current_plays)}</span>
-                  <small className="delta-up">+{compactNumber(item.play_delta)}</small>
-                </button>
-              </article>
-            ))}
-            {!insights.gainers.length ? <p className="empty-state">暂无 24h 播放增长数据。</p> : null}
+            {(accountPerformance?.follower_growth || []).slice(0, 8).map((row) => <article className="list-item" key={row.account.id}><button className="list-action" onClick={() => onAccount(row.account.id)}><strong>@{row.account.username}</strong><span>播放 {signedNumber(row.plays_delta)} · 互动 {row.engagement}%</span><small className={row.follower_delta >= 0 ? "delta-up" : "delta-down"}>{signedNumber(row.follower_delta)} 粉丝</small></button></article>)}
+            {!accountPerformance?.follower_growth.length ? <p className="empty-state">暂无粉丝增长数据。</p> : null}
           </div>
         </section>
-
         <section className="panel">
-          <div className="panel-head"><h2>异常检测</h2><span>{insights.anomalies.length} 条</span></div>
-          <div className="stack-list rich-list">
-            {insights.anomalies.map((item, index) => (
-              <article className={`list-item item-hot anomaly-${item.level || "warning"}`} key={`${item.account.id}-${item.type}-${index}`}>
-                <button className="list-action" onClick={() => onAccount(item.account.id)}>
-                  <strong>{item.title}<span className={`level-badge level-${item.level || "warning"}`}>{item.level || "warning"}</span></strong>
-                  <span>{item.message}</span>
-                  <small>@{item.account.username}{item.z_score !== undefined ? ` · z=${item.z_score}` : ""}</small>
-                </button>
-              </article>
-            ))}
-            {!insights.anomalies.length ? <p className="empty-state">暂无异常检测结果。</p> : null}
+          <div className="panel-head"><h2>账号互动排行</h2><span>{accountPerformance?.engagement.length || 0} 个账号</span></div>
+          <div className="stack-list">
+            {(accountPerformance?.engagement || []).slice(0, 8).map((row) => <article className="list-item" key={row.account.id}><button className="list-action" onClick={() => onAccount(row.account.id)}><strong>@{row.account.username}</strong><span>本期播放 {signedNumber(row.plays_delta)}</span><small>{row.engagement}% 互动率</small></button></article>)}
+            {!accountPerformance?.engagement.length ? <p className="empty-state">暂无账号互动数据。</p> : null}
           </div>
         </section>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head"><div><h2>视频周期表现</h2><span>{days} 天播放变化与互动表现</span></div><button className="text-button" onClick={() => onVideos("plays_desc")}>查看视频列表</button></div>
+        <div className="table-wrap">
+          <table className="compact-table analysis-table">
+            <thead><tr><th>#</th><th>视频</th><th>作者</th><th>本期播放</th><th>上期播放</th><th>互动率</th><th>数据基准</th></tr></thead>
+            <tbody>
+              {(videoPerformance?.gainers || []).map((row, index) => (
+                <tr key={row.video.id}>
+                  <td>{index + 1}</td>
+                  <td><button className="link-button" onClick={() => onVideo(row.video.id)}>{row.video.title || "无标题视频"}</button><small>{row.video.video_id || "无视频 ID"}</small></td>
+                  <td><button className="link-button" onClick={() => onAccount(row.account.id)}>@{row.account.username}</button></td>
+                  <td className={row.plays_delta >= 0 ? "delta-up" : "delta-down"}>{signedNumber(row.plays_delta)}</td>
+                  <td>{row.has_comparison ? signedNumber(row.previous_plays_delta) : "样本不足"}</td>
+                  <td>{row.engagement}%</td>
+                  <td>{row.has_comparison ? formatDate(row.baseline_at) : "仅本期"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!videoPerformance?.gainers.length ? <p className="empty-state">暂无周期视频数据；旧服务端仍可在下方查看 24h 增长结果。</p> : null}
+      </section>
+
+      {!videoPerformance && insights.gainers.length ? (
+        <section className="panel">
+          <div className="panel-head"><h2>24h 播放增长 TOP</h2><span>{insights.gainers.length} 条</span></div>
+          <div className="stack-list">{insights.gainers.map((item) => <article className="list-item" key={item.video.id}><button className="list-action" onClick={() => onVideo(item.video.id)}><strong>{item.video.title || "无标题视频"}</strong><span>@{item.account.username} · 当前 {compactNumber(item.current_plays)}</span><small className="delta-up">+{compactNumber(item.play_delta)}</small></button></article>)}</div>
+        </section>
+      ) : null}
+
+      {(accountPerformance?.declines.length || videoPerformance?.declines.length) ? (
+        <section className="analytics-grid">
+          <section className="panel"><div className="panel-head"><h2>账号下降提醒</h2><span>{accountPerformance?.declines.length || 0} 个</span></div><div className="stack-list">{(accountPerformance?.declines || []).map((row) => <article className="list-item item-hot" key={row.account.id}><button className="list-action" onClick={() => onAccount(row.account.id)}><strong>@{row.account.username}</strong><span>本期播放下降</span><small className="delta-down">{signedNumber(row.plays_delta)}</small></button></article>)}</div></section>
+          <section className="panel"><div className="panel-head"><h2>视频下降提醒</h2><span>{videoPerformance?.declines.length || 0} 条</span></div><div className="stack-list">{(videoPerformance?.declines || []).map((row) => <article className="list-item item-hot" key={row.video.id}><button className="list-action" onClick={() => onVideo(row.video.id)}><strong>{row.video.title || "无标题视频"}</strong><span>@{row.account.username}</span><small className="delta-down">{signedNumber(row.plays_delta)}</small></button></article>)}</div></section>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <div className="panel-head"><h2>异常检测</h2><div className="panel-actions"><span>{insights.anomalies.length} 条</span><button className="text-button" onClick={onAlerts}>打开告警中心</button></div></div>
+        <div className="stack-list rich-list">
+          {insights.anomalies.map((item, index) => <article className={`list-item item-hot anomaly-${item.level || "warning"}`} key={`${item.account.id}-${item.type}-${index}`}><button className="list-action" onClick={() => onAccount(item.account.id)}><strong>{item.title}<span className={`level-badge level-${item.level || "warning"}`}>{item.level || "warning"}</span></strong><span>{item.message}</span><small>@{item.account.username}{item.z_score !== undefined ? ` · z=${item.z_score}` : ""}</small></button></article>)}
+          {!insights.anomalies.length ? <p className="empty-state">暂无异常检测结果。</p> : null}
+        </div>
       </section>
 
       <section className="panel">
         <div className="panel-head"><h2>账号健康排行</h2><span>{insights.rankings.length} 个账号</span></div>
         <div className="table-wrap">
           <table className="compact-table">
-            <thead><tr><th>#</th><th>账号</th><th>健康分</th><th>等级</th><th>24h 播放</th><th>粉丝变化</th><th>互动率</th><th>同步成功率</th></tr></thead>
+            <thead><tr><th>#</th><th>账号</th><th>健康分</th><th>等级</th><th>24h 播放</th><th>粉丝变化</th><th>互动率</th><th>同步</th><th>新鲜度</th><th>增长分</th></tr></thead>
             <tbody>
               {insights.rankings.map((row, index) => (
                 <tr key={row.account.id}>
@@ -1861,6 +2070,8 @@ function InsightsPage({
                   <td>{signedNumber(row.follower_delta_24h)}</td>
                   <td>{row.engagement}%</td>
                   <td>{row.health.sync_rate ?? "-"}%</td>
+                  <td>{row.health.freshness ?? "-"}</td>
+                  <td>{row.health.growth_score ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -3159,8 +3370,11 @@ function SettingsPage({ settings, busy, onChange, onSave }: { settings: Settings
   </section>;
 }
 
-function Metric({ icon, label, value, detail }: { icon: JSX.Element; label: string; value: number | undefined; detail: string }) {
-  return <article className="metric-card"><div className="metric-icon">{icon}</div><div><span>{label}</span><strong>{label === "互动率" ? `${value || 0}%` : compactNumber(value)}</strong><small>{detail}</small></div></article>;
+function Metric({ icon, label, value, detail, onClick }: { icon: JSX.Element; label: string; value: number | undefined; detail: string; onClick?: () => void }) {
+  const content = <><div className="metric-icon">{icon}</div><div><span>{label}</span><strong>{label === "互动率" ? `${value || 0}%` : compactNumber(value)}</strong><small>{detail}</small></div></>;
+  return onClick
+    ? <button className="metric-card metric-button" type="button" onClick={onClick}>{content}</button>
+    : <article className="metric-card">{content}</article>;
 }
 
 function PageControls({ meta, page, onPage }: { meta: PageMeta; page: number; onPage: (page: number) => void }) {

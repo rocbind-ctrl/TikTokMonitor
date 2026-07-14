@@ -333,6 +333,37 @@ export interface InsightGainer {
   current_plays: number;
 }
 
+export interface InsightComparisonMetric {
+  current: number;
+  previous: number;
+  difference: number;
+  rate: number | null;
+  available: boolean;
+}
+
+export interface InsightPerformance {
+  account: InsightAccountRef;
+  plays_delta: number;
+  previous_plays_delta: number;
+  follower_delta: number;
+  previous_follower_delta: number;
+  engagement: number;
+  has_history: boolean;
+  has_comparison: boolean;
+  baseline_at?: string | null;
+}
+
+export interface InsightVideoPerformance {
+  video: Video;
+  account: InsightAccountRef;
+  plays_delta: number;
+  previous_plays_delta: number;
+  engagement: number;
+  has_history: boolean;
+  has_comparison: boolean;
+  baseline_at?: string | null;
+}
+
 export interface InsightsData {
   summary: InsightSummary;
   trend: InsightTrend;
@@ -340,6 +371,37 @@ export interface InsightsData {
   anomalies: InsightAnomaly[];
   gainers: InsightGainer[];
   alerts: Alert[];
+  period?: {
+    days: number;
+    current_start: string;
+    current_end: string;
+    previous_start: string;
+    previous_end: string;
+    timezone: string;
+  };
+  comparison?: {
+    plays: InsightComparisonMetric;
+    followers: InsightComparisonMetric;
+  };
+  coverage?: {
+    total_accounts: number;
+    history_accounts: number;
+    comparable_accounts: number;
+    total_videos: number;
+    history_videos: number;
+    comparable_videos: number;
+  };
+  accounts?: {
+    plays_growth: InsightPerformance[];
+    follower_growth: InsightPerformance[];
+    engagement: InsightPerformance[];
+    declines: InsightPerformance[];
+  };
+  videos?: {
+    gainers: InsightVideoPerformance[];
+    declines: InsightVideoPerformance[];
+    engagement: InsightVideoPerformance[];
+  };
 }
 
 export interface AccountFilters {
@@ -605,6 +667,8 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
       request<DataQuality>(`/api/v2/data-quality?limit=${limit}`, { method: "GET" }),
     insights: (days = 7, limit = 10) =>
       request<InsightsData>(`/api/v2/insights?days=${days}&limit=${limit}`, { method: "GET" }),
+    exportInsightsCsv: (days = 7, section: "accounts" | "videos" | "anomalies" = "accounts") =>
+      requestText(`/api/v2/export/insights.csv?days=${days}&section=${section}`, { method: "GET" }),
     exportAccountsCsv: (filters: AccountFilters = {}) => {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {

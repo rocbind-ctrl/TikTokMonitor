@@ -404,6 +404,10 @@ class ApiV2TestCase(unittest.TestCase):
             db.flush()
             db.add(VideoStatsHistory(video_id=video.id, play_count=100, recorded_at=now - timedelta(hours=2)))
             db.add(VideoStatsHistory(video_id=video.id, play_count=650, recorded_at=now))
+            db.add(VideoStatsHistory(video_id=video.id, play_count=50, recorded_at=now - timedelta(days=15)))
+            db.add(VideoStatsHistory(video_id=video.id, play_count=80, recorded_at=now - timedelta(days=8)))
+            db.add(AccountStatsHistory(account_id=account_id, follower_count=80, total_plays=500, recorded_at=now - timedelta(days=15)))
+            db.add(AccountStatsHistory(account_id=account_id, follower_count=90, total_plays=700, recorded_at=now - timedelta(days=8)))
             for index, total in enumerate([760, 820, 900, 1000, 2000]):
                 db.add(
                     AccountStatsHistory(
@@ -433,6 +437,27 @@ class ApiV2TestCase(unittest.TestCase):
         self.assertEqual(data["gainers"][0]["video"]["id"], video_db_id)
         self.assertGreater(data["gainers"][0]["play_delta"], 0)
         self.assertEqual(data["alerts"][0]["title"], "Insight alert")
+        self.assertEqual(data["period"]["days"], 7)
+        self.assertEqual(data["coverage"]["comparable_accounts"], 1)
+        self.assertEqual(data["coverage"]["comparable_videos"], 1)
+        self.assertTrue(data["comparison"]["plays"]["available"])
+        self.assertEqual(data["comparison"]["plays"]["previous"], 200)
+        self.assertEqual(data["accounts"]["plays_growth"][0]["account"]["id"], account_id)
+        self.assertTrue(data["accounts"]["plays_growth"][0]["has_comparison"])
+        self.assertEqual(data["videos"]["gainers"][0]["video"]["id"], video_db_id)
+
+        account_export = self.client.get("/api/v2/export/insights.csv?days=7&section=accounts")
+        self.assertEqual(account_export.status_code, 200)
+        self.assertIn("insight-account", account_export.text)
+        self.assertIn("previous_plays_delta", account_export.text)
+
+        video_export = self.client.get("/api/v2/export/insights.csv?days=7&section=videos")
+        self.assertEqual(video_export.status_code, 200)
+        self.assertIn("insight-video", video_export.text)
+
+        anomaly_export = self.client.get("/api/v2/export/insights.csv?days=7&section=anomalies")
+        self.assertEqual(anomaly_export.status_code, 200)
+        self.assertIn("insight-account", anomaly_export.text)
 
     def test_v2_accepts_bearer_session_without_cookie(self):
         token = self.login_token()

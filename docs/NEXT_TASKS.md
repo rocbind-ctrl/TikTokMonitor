@@ -4,15 +4,14 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Install-check the published 0.2.19 closeout build.
-   - Install the Windows MSI and connect it to the deployed server.
-   - Verify video selection and batch copy for links, IDs, and authors.
-   - Verify account-row and current-page copy actions.
+1. Publish and deploy the completed 0.3.5 analytics closeout.
+   - Verify Server Check and all desktop build targets.
+   - Back up the production database before deploying the server API.
+   - Smoke-test `/api/v2/insights` and all three analytics CSV exports.
 
-2. Start 0.3.0 data analytics enhancements.
-   - Add clearer account and video growth comparisons.
-   - Add dashboard drill-downs into the matching filtered lists.
-   - Define reusable time ranges and comparison rules before changing APIs.
+2. Install-check the 0.3.5 Windows MSI.
+   - Verify 7/14/30-day switching, saved views, comparison coverage, rankings,
+     drill-downs, and account/video/anomaly exports.
 
 3. Keep release operations repeatable.
    - Update docs after each version.
@@ -160,14 +159,21 @@ safe additions when they improve team operations.
   consistent clipboard feedback, synchronized desktop version metadata,
   successful Server Check/Desktop Build workflows, and a downloaded Windows
   installer artifact.
+- Completed the local 0.3.x analytics stage in 0.3.5: reusable 7/14/30-day
+  periods, adjacent-period playback/follower comparisons, history coverage,
+  account and video performance rankings, decline visibility, dashboard and
+  analysis drill-downs, saved local analysis views, three analytics CSV
+  exports, backward-compatible desktop response handling, and API regression
+  coverage. Publishing and server deployment remain pending.
 
 ## Follow-up Product Tasks
 
-1. Start 0.3.0 with data analytics and comparison workflows.
+1. Plan 0.4.x around scheduled reports and team handoff workflows.
 
-2. Add dashboard drill-downs for growth, anomaly, and data-quality segments.
+2. Decide whether named server-side reports are needed before adding shared
+   report storage or database migrations.
 
-3. Keep 0.2.x behavior stable while the analytics APIs evolve.
+3. Keep 0.3.x comparison semantics stable for exported reports.
 
 ## Engineering Tasks
 

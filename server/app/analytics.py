@@ -215,6 +215,179 @@ def dashboard_trend(db: Session, days: int = 7) -> dict:
     return {"labels": display_labels, "plays": plays, "followers": followers}
 
 
+def _row_at_or_before(rows, boundary: datetime):
+    matched = None
+    for row in rows:
+        recorded_at = _as_utc(row.recorded_at)
+        if recorded_at and recorded_at <= boundary:
+            matched = row
+        elif recorded_at and recorded_at > boundary:
+            break
+    return matched
+
+
+def _comparison_metric(current: int, previous: int, available: bool) -> dict:
+    difference = current - previous
+    rate = None if not available or previous == 0 else round(difference / abs(previous) * 100, 1)
+    return {
+        "current": int(current),
+        "previous": int(previous),
+        "difference": int(difference),
+        "rate": rate,
+        "available": available,
+    }
+
+
+def period_insights(db: Session, days: int = 7, limit: int = 10) -> dict:
+    """Build comparable account/video performance without requiring new tables."""
+    days = min(30, max(1, days))
+    limit = min(50, max(1, limit))
+    now = _utcnow()
+    current_start = now - timedelta(days=days)
+    previous_start = current_start - timedelta(days=days)
+    accounts = db.query(Account).filter(Account.is_active == 1).order_by(Account.id).all()
+    account_ids = [account.id for account in accounts]
+    account_history: dict[int, list[AccountStatsHistory]] = defaultdict(list)
+    for account_id_chunk in chunked(account_ids):
+        rows = (
+            db.query(AccountStatsHistory)
+            .filter(AccountStatsHistory.account_id.in_(account_id_chunk))
+            .order_by(AccountStatsHistory.account_id, AccountStatsHistory.recorded_at)
+            .all()
+        )
+        for row in rows:
+            account_history[row.account_id].append(row)
+
+    account_rows = []
+    current_plays_total = previous_plays_total = 0
+    current_followers_total = previous_followers_total = 0
+    history_accounts = comparable_accounts = 0
+    for account in accounts:
+        history = account_history.get(account.id, [])
+        current_base = _row_at_or_before(history, current_start)
+        previous_base = _row_at_or_before(history, previous_start)
+        has_current = current_base is not None
+        has_comparison = current_base is not None and previous_base is not None
+        if has_current:
+            history_accounts += 1
+        if has_comparison:
+            comparable_accounts += 1
+        current_plays = account_total_plays(account) - (current_base.total_plays if current_base else account_total_plays(account))
+        current_followers = account.follower_count - (current_base.follower_count if current_base else account.follower_count)
+        previous_plays = (current_base.total_plays - previous_base.total_plays) if has_comparison else 0
+        previous_followers = (current_base.follower_count - previous_base.follower_count) if has_comparison else 0
+        if has_comparison:
+            current_plays_total += current_plays
+            previous_plays_total += previous_plays
+            current_followers_total += current_followers
+            previous_followers_total += previous_followers
+        account_rows.append(
+            {
+                "account": account,
+                "plays_delta": int(current_plays),
+                "previous_plays_delta": int(previous_plays),
+                "follower_delta": int(current_followers),
+                "previous_follower_delta": int(previous_followers),
+                "engagement": engagement_rate(account),
+                "has_history": has_current,
+                "has_comparison": has_comparison,
+                "baseline_at": current_base.recorded_at if current_base else None,
+            }
+        )
+
+    videos = (
+        db.query(Video)
+        .join(Account, Video.account_id == Account.id)
+        .filter(Account.is_active == 1)
+        .order_by(Video.id)
+        .all()
+    )
+    video_ids = [video.id for video in videos]
+    video_history: dict[int, list[VideoStatsHistory]] = defaultdict(list)
+    for video_id_chunk in chunked(video_ids):
+        rows = (
+            db.query(VideoStatsHistory)
+            .filter(VideoStatsHistory.video_id.in_(video_id_chunk))
+            .order_by(VideoStatsHistory.video_id, VideoStatsHistory.recorded_at)
+            .all()
+        )
+        for row in rows:
+            video_history[row.video_id].append(row)
+
+    video_rows = []
+    history_videos = comparable_videos = 0
+    for video in videos:
+        history = video_history.get(video.id, [])
+        current_base = _row_at_or_before(history, current_start)
+        previous_base = _row_at_or_before(history, previous_start)
+        published_at = _as_utc(video.published_at)
+        is_new = bool(published_at and published_at >= current_start)
+        has_current = current_base is not None or is_new
+        has_comparison = current_base is not None and previous_base is not None
+        if has_current:
+            history_videos += 1
+        if has_comparison:
+            comparable_videos += 1
+        current_plays = video.play_count - (current_base.play_count if current_base else 0 if is_new else video.play_count)
+        previous_plays = (current_base.play_count - previous_base.play_count) if has_comparison else 0
+        interactions = video.like_count + video.comment_count + video.share_count
+        video_rows.append(
+            {
+                "video": video,
+                "account": video.account,
+                "plays_delta": int(current_plays),
+                "previous_plays_delta": int(previous_plays),
+                "engagement": round(interactions / video.play_count * 100, 2) if video.play_count else 0,
+                "has_history": has_current,
+                "has_comparison": has_comparison,
+                "baseline_at": current_base.recorded_at if current_base else None,
+            }
+        )
+
+    known_accounts = [row for row in account_rows if row["has_history"]]
+    known_videos = [row for row in video_rows if row["has_history"]]
+    account_plays = sorted(known_accounts, key=lambda row: (row["plays_delta"], row["follower_delta"]), reverse=True)
+    account_followers = sorted(known_accounts, key=lambda row: (row["follower_delta"], row["plays_delta"]), reverse=True)
+    account_engagement = sorted(known_accounts, key=lambda row: (row["engagement"], row["plays_delta"]), reverse=True)
+    account_declines = sorted((row for row in known_accounts if row["plays_delta"] < 0), key=lambda row: row["plays_delta"])
+    video_gainers = sorted(known_videos, key=lambda row: (row["plays_delta"], row["engagement"]), reverse=True)
+    video_declines = sorted((row for row in known_videos if row["plays_delta"] < 0), key=lambda row: row["plays_delta"])
+    video_engagement = sorted(known_videos, key=lambda row: (row["engagement"], row["plays_delta"]), reverse=True)
+    return {
+        "period": {
+            "days": days,
+            "current_start": current_start,
+            "current_end": now,
+            "previous_start": previous_start,
+            "previous_end": current_start,
+            "timezone": day_timezone_label(),
+        },
+        "comparison": {
+            "plays": _comparison_metric(current_plays_total, previous_plays_total, comparable_accounts > 0),
+            "followers": _comparison_metric(current_followers_total, previous_followers_total, comparable_accounts > 0),
+        },
+        "coverage": {
+            "total_accounts": len(accounts),
+            "history_accounts": history_accounts,
+            "comparable_accounts": comparable_accounts,
+            "total_videos": len(videos),
+            "history_videos": history_videos,
+            "comparable_videos": comparable_videos,
+        },
+        "accounts": {
+            "plays_growth": account_plays[:limit],
+            "follower_growth": account_followers[:limit],
+            "engagement": account_engagement[:limit],
+            "declines": account_declines[:limit],
+        },
+        "videos": {
+            "gainers": video_gainers[:limit],
+            "declines": video_declines[:limit],
+            "engagement": video_engagement[:limit],
+        },
+    }
+
+
 def account_follower_trend(db: Session, account_id: int, days: int = 30) -> dict:
     since = _utcnow() - timedelta(days=days)
     rows = (

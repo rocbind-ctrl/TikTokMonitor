@@ -91,3 +91,52 @@ def export_videos_csv(db: Session, account_id: int | None = None, videos: list[V
             ]
         )
     return output.getvalue()
+
+
+def export_insights_csv(payload: dict, section: str = "accounts") -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    period = payload.get("period") or {}
+    days = period.get("days") or 7
+    if section == "videos":
+        writer.writerow(["period_days", "username", "video_id", "title", "plays_delta", "previous_plays_delta", "engagement_rate", "has_comparison"])
+        for row in (payload.get("videos") or {}).get("gainers") or []:
+            writer.writerow([
+                days,
+                (row.get("account") or {}).get("username", ""),
+                (row.get("video") or {}).get("video_id", ""),
+                (row.get("video") or {}).get("title", ""),
+                row.get("plays_delta", 0),
+                row.get("previous_plays_delta", 0),
+                row.get("engagement", 0),
+                row.get("has_comparison", False),
+            ])
+    elif section == "anomalies":
+        writer.writerow(["period_days", "username", "level", "type", "title", "message", "z_score"])
+        for row in payload.get("anomalies") or []:
+            writer.writerow([
+                days,
+                (row.get("account") or {}).get("username", ""),
+                row.get("level", ""),
+                row.get("type", ""),
+                row.get("title", ""),
+                row.get("message", ""),
+                row.get("z_score", ""),
+            ])
+    else:
+        writer.writerow(["period_days", "username", "group", "employee", "plays_delta", "previous_plays_delta", "follower_delta", "previous_follower_delta", "engagement_rate", "has_comparison"])
+        for row in (payload.get("accounts") or {}).get("plays_growth") or []:
+            account = row.get("account") or {}
+            writer.writerow([
+                days,
+                account.get("username", ""),
+                account.get("group", ""),
+                account.get("employee", ""),
+                row.get("plays_delta", 0),
+                row.get("previous_plays_delta", 0),
+                row.get("follower_delta", 0),
+                row.get("previous_follower_delta", 0),
+                row.get("engagement", 0),
+                row.get("has_comparison", False),
+            ])
+    return output.getvalue()
