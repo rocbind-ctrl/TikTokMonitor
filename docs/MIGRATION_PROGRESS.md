@@ -6,9 +6,9 @@ Updated: 2026-07-14
 
 The cross-platform migration has moved from scaffold to usable release. The
 central Docker server is deployed, the Tauri desktop client is published through
-GitHub Actions, and the 0.2.x product work is now focused on closing feature
-gaps with the recovered Windows replica while keeping the new server/client
-architecture.
+GitHub Actions, and the 0.2.x product work has reached its local closeout in
+0.2.19 while keeping the new server/client architecture. The next product stage
+is 0.3.0 data analytics enhancement after release verification.
 
 Latest published release commit:
 
@@ -100,12 +100,16 @@ https://github.com/rocbind-ctrl/TikTokMonitor
   and missing metrics; each chip jumps to the matching account health filter;
   GitHub Actions Server Check and Desktop Build passed, and the Windows
   installer artifact was downloaded locally.
+- Completed the local 0.2.19 closeout implementation: video row selection and
+  batch copy for links, IDs, and author usernames; account row/current-page
+  copy actions; filtered empty-state guidance; consistent clipboard feedback;
+  and synchronized desktop version metadata. Publishing remains pending.
 
 ## Pending
 
-- Continue 0.2.x product work against the recovered replica feature set.
-- Use `docs/NEXT_TASKS.md` as the active replica feature parity checklist for
-  0.2.18 and later.
+- Publish 0.2.19, verify GitHub Actions, and install-check the Windows MSI.
+- Start 0.3.0 data analytics enhancement after 0.2.19 release verification.
+- Use `docs/NEXT_TASKS.md` as the active release and product-stage checklist.
 - Keep deployment and release notes synchronized after each published version.
 - Plan the database migration path before the system becomes daily team
   infrastructure.

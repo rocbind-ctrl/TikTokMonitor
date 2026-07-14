@@ -4,16 +4,16 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Install-check 0.2.18 account list health visibility.
-   - Install the Windows 0.2.18 MSI.
-   - Connect to the deployed server and verify account-row health chips.
-   - Click stale sync, sync failure, no-video, no-recent-post, and missing
-     metric chips to confirm the matching account filter opens.
+1. Publish and install-check the 0.2.19 closeout build.
+   - Verify GitHub Actions Server Check and Desktop Build.
+   - Install the Windows MSI and connect it to the deployed server.
+   - Verify video selection and batch copy for links, IDs, and authors.
+   - Verify account-row and current-page copy actions.
 
-2. Start 0.2.19 batch-friendly video actions.
-   - Add safe selection for video rows.
-   - Add copy selected video links and copy selected video IDs.
-   - Keep exported CSV and existing video filters unchanged.
+2. Start 0.3.0 data analytics enhancements.
+   - Add clearer account and video growth comparisons.
+   - Add dashboard drill-downs into the matching filtered lists.
+   - Define reusable time ranges and comparison rules before changing APIs.
 
 3. Keep release operations repeatable.
    - Update docs after each version.
@@ -50,18 +50,18 @@ safe additions when they improve team operations.
 - Release/deployment: GitHub Actions server checks, desktop builds, Docker
   deployment guide, backup/restore tooling, and cloud server smoke tests.
 
-### 0.2.x must-fill gaps
+### 0.2.x must-fill gaps (closed in 0.2.19)
 
 1. Account list productivity.
-   - Add richer quick actions for common account operations.
-   - Make bulk operations easier to discover and safer to execute.
-   - Improve visibility of stale, failed, or incomplete accounts from the list.
+   - Added row-level username/profile copy and current-page batch copy.
+   - Kept bulk tag updates grouped in a visible, guarded action area.
+   - Added health chips for stale, failed, or incomplete accounts.
 
 2. Video list productivity.
    - Add stronger filters for missing links, low/high metrics, recent changes,
      and sync freshness. `0.2.17` implements the first server-backed version.
-   - Add batch-friendly actions where safe, such as copy/open selected video
-     references.
+   - Added current-page selection and batch copy for links, video IDs, and
+     author usernames in `0.2.19`.
    - Make metric changes and abnormal videos easier to spot without opening
      every detail page.
 
@@ -70,13 +70,14 @@ safe additions when they improve team operations.
      explains the card.
    - Preserve the current cross-links between account, video, alert, and
      health views.
-   - Keep copy/open actions consistent across table rows and detail pages.
+   - Kept copy/open actions consistent across table rows and detail pages;
+     batch copy now uses the same operation feedback.
 
 4. Operator guidance.
    - Continue adding inline next-step hints near empty, failed, or partial-data
      states.
-   - Make connection, login, export, and sync troubleshooting visible from the
-     relevant page, not only from the guide.
+   - Added filtered-empty-state guidance and direct clear-filter actions on
+     account and video workspaces.
 
 ### Can be enhanced after the must-fill gaps
 
@@ -155,17 +156,17 @@ safe additions when they improve team operations.
   and missing metrics; clicking a chip applies the matching account health
   filter. GitHub Actions Server Check and Desktop Build passed, and the Windows
   installer artifact was downloaded locally.
+- Prepared 0.2.19 as the 0.2.x closeout: video row selection and batch copy,
+  account username/profile copy actions, clearer filtered empty states,
+  consistent clipboard feedback, and synchronized desktop version metadata.
 
 ## Follow-up Product Tasks
 
-1. Add batch-friendly video actions where safe, such as copy selected video
-   links or IDs.
+1. Start 0.3.0 with data analytics and comparison workflows.
 
-2. Improve desktop navigation and feature discoverability for non-technical
-   operators.
+2. Add dashboard drill-downs for growth, anomaly, and data-quality segments.
 
-3. Keep the parity checklist synchronized as each 0.2.x release closes or
-   defers items.
+3. Keep 0.2.x behavior stable while the analytics APIs evolve.
 
 ## Engineering Tasks
 

@@ -429,7 +429,7 @@ export default function App() {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      reportOperation("success", "已复制链接", `${label} 已复制到剪贴板。`);
+      reportOperation("success", "复制成功", `${label} 已复制到剪贴板。`);
     } catch (error) {
       const detail = errorDetail(error, "复制失败");
       setMessage(detail);
@@ -1091,7 +1091,9 @@ export default function App() {
             onDeleteAccount={(account) => void deleteAccount(account)}
             onOpenAccount={(id) => void openAccount(id)}
             onNavigate={setView}
+            onCopyAccountUsername={(account) => void copyText(`@${account.username}`, `@${account.username} 用户名`)}
             onCopyAccountLink={(account) => void copyText(profileUrl(account.username), `@${account.username} 主页链接`)}
+            onCopyText={(text, label) => void copyText(text, label)}
             onApplyQuality={applyQualityFilter}
             onAlert={(alert) => void handleAlert(alert)}
             onReadAll={() => markAllAlertsRead()}
@@ -1132,6 +1134,7 @@ export default function App() {
             onAccount={(id) => void openAccount(id)}
             onCopyLink={(video) => void copyText(videoUrl(video), "视频链接")}
             onCopyVideoId={(video) => void copyText(video.video_id || "", "视频 ID")}
+            onCopyText={(text, label) => void copyText(text, label)}
             onExportVideos={() => void exportVideosCsv()}
           />
         ) : null}
@@ -1347,7 +1350,9 @@ function Dashboard({
   onDeleteAccount,
   onOpenAccount,
   onNavigate,
+  onCopyAccountUsername,
   onCopyAccountLink,
+  onCopyText,
   onApplyQuality,
   onAlert,
   onReadAll
@@ -1396,7 +1401,9 @@ function Dashboard({
   onDeleteAccount: (account: Account) => void;
   onOpenAccount: (id: number) => void;
   onNavigate: (view: View) => void;
+  onCopyAccountUsername: (account: Account) => void;
   onCopyAccountLink: (account: Account) => void;
+  onCopyText: (text: string, label: string) => void;
   onApplyQuality: (quality: string) => void;
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
@@ -1429,6 +1436,12 @@ function Dashboard({
   const accountQualityIssues = (account: Account) => Object.entries(account.quality_flags || {})
     .filter(([key, active]) => active && qualityLabels[key])
     .map(([key]) => ({ key, label: qualityLabels[key] }));
+  const hasActiveAccountFilters = Boolean(
+    accountFilters.q || accountFilters.group || accountFilters.phone || accountFilters.employee || accountFilters.post_today || accountFilters.quality
+      || (accountFilters.status && accountFilters.status !== "active") || (accountFilters.sort && accountFilters.sort !== "plays_desc")
+  );
+  const currentPageUsernames = [...new Set(accounts.map((account) => `@${account.username}`))];
+  const currentPageLinks = [...new Set(accounts.map((account) => profileUrl(account.username)))];
   return (
     <>
       <section className="metric-grid">
@@ -1635,6 +1648,11 @@ function Dashboard({
             <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onExportAccounts}>导出账号 CSV</button>
             <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onExportVideos}>导出视频 CSV</button>
           </div>
+          <div className="batch-action-bar">
+            <span>当前页 {accounts.length} 个账号</span>
+            <button className="ghost-light-button" disabled={!authenticated || !currentPageUsernames.length} onClick={() => onCopyText(currentPageUsernames.join("\n"), `${currentPageUsernames.length} 个账号用户名`)}>复制本页用户名</button>
+            <button className="ghost-light-button" disabled={!authenticated || !currentPageLinks.length} onClick={() => onCopyText(currentPageLinks.join("\n"), `${currentPageLinks.length} 个账号主页链接`)}>复制本页主页链接</button>
+          </div>
           <div className="table-wrap">
             <table>
               <thead><tr><th>账号</th><th>标签</th><th>粉丝</th><th>今日</th><th>新发播放</th><th>今日增播</th><th>总播放</th><th>24h</th><th></th></tr></thead>
@@ -1646,7 +1664,8 @@ function Dashboard({
                       <span>{account.nickname || account.employee || "未标注"}</span>
                       <div className="mini-action-row">
                         <a href={profileUrl(account.username)} target="_blank" rel="noreferrer">TikTok</a>
-                        <button onClick={() => onCopyAccountLink(account)}>复制</button>
+                        <button onClick={() => onCopyAccountUsername(account)}>复制用户名</button>
+                        <button onClick={() => onCopyAccountLink(account)}>复制主页</button>
                       </div>
                       <div className="status-chip-row">
                         {accountQualityIssues(account).map((issue) => (
@@ -1685,8 +1704,8 @@ function Dashboard({
           </div>
           {!accounts.length ? (
             <EmptyState
-              title={accountsMeta.total ? "当前页没有账号" : "还没有可显示的账号"}
-              detail={accountsMeta.total ? "换一页或清除筛选后再查看。" : "可以在上方输入 TikTok 用户名/主页链接添加，也可以到“批量导入”一次导入多个账号。"}
+              title={hasActiveAccountFilters ? "没有符合筛选条件的账号" : accountsMeta.total ? "当前页没有账号" : "还没有可显示的账号"}
+              detail={hasActiveAccountFilters ? "调整条件或清除筛选后再查看；数据健康标签也会影响结果。" : accountsMeta.total ? "换一页或清除筛选后再查看。" : "可以在上方输入 TikTok 用户名/主页链接添加，也可以到“批量导入”一次导入多个账号。"}
               action={<button className="ghost-light-button" onClick={clearAccountFilters}>清除筛选</button>}
             />
           ) : null}
@@ -1998,6 +2017,7 @@ function VideosPage({
   onAccount,
   onCopyLink,
   onCopyVideoId,
+  onCopyText,
   onExportVideos
 }: {
   videos: Video[];
@@ -2014,8 +2034,13 @@ function VideosPage({
   onAccount: (id: number) => void;
   onCopyLink: (video: Video) => void;
   onCopyVideoId: (video: Video) => void;
+  onCopyText: (text: string, label: string) => void;
   onExportVideos: () => void;
 }) {
+  const [selectedVideoIds, setSelectedVideoIds] = useState<number[]>([]);
+  useEffect(() => {
+    setSelectedVideoIds([]);
+  }, [page, filters]);
   const videosWithLinks = videos.filter((video) => videoUrl(video)).length;
   const totalPlaysOnPage = videos.reduce((sum, video) => sum + (video.play_count || 0), 0);
   const recentVideos = videos.filter((video) => {
@@ -2050,6 +2075,13 @@ function VideosPage({
     else if ((video.play_count || 0) >= 10000) issues.push("高播放");
     return issues;
   };
+  const selectedVideos = videos.filter((video) => selectedVideoIds.includes(video.id));
+  const selectedLinks = [...new Set(selectedVideos.map(videoUrl).filter(Boolean))];
+  const selectedIds = [...new Set(selectedVideos.map((video) => video.video_id).filter((value): value is string => Boolean(value)))];
+  const selectedAuthors = [...new Set(selectedVideos.map((video) => video.account?.username).filter((value): value is string => Boolean(value)).map((value) => `@${value}`))];
+  const allPageVideosSelected = Boolean(videos.length) && videos.every((video) => selectedVideoIds.includes(video.id));
+  const togglePageVideos = (selected: boolean) => setSelectedVideoIds(selected ? videos.map((video) => video.id) : []);
+  const toggleVideo = (videoId: number, selected: boolean) => setSelectedVideoIds((current) => selected ? [...new Set([...current, videoId])] : current.filter((id) => id !== videoId));
 
   return (
     <section className="detail-layout">
@@ -2103,10 +2135,19 @@ function VideosPage({
           </select>
           <button className="ghost-light-button" disabled={!hasActiveFilters} onClick={onClearFilters}>清除筛选</button>
         </div>
+        <div className="batch-action-bar">
+          <label className="check-label"><input type="checkbox" checked={allPageVideosSelected} disabled={!videos.length} onChange={(event) => togglePageVideos(event.target.checked)} /> 选择本页</label>
+          <span>已选择 {selectedVideos.length} 条</span>
+          <button className="ghost-light-button" disabled={!selectedLinks.length} onClick={() => onCopyText(selectedLinks.join("\n"), `${selectedLinks.length} 条视频链接`)}>复制链接</button>
+          <button className="ghost-light-button" disabled={!selectedIds.length} onClick={() => onCopyText(selectedIds.join("\n"), `${selectedIds.length} 个视频 ID`)}>复制 ID</button>
+          <button className="ghost-light-button" disabled={!selectedAuthors.length} onClick={() => onCopyText(selectedAuthors.join("\n"), `${selectedAuthors.length} 个作者用户名`)}>复制作者</button>
+          <button className="text-button" disabled={!selectedVideos.length} onClick={() => setSelectedVideoIds([])}>清除选择</button>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
+                <th className="select-column"><input aria-label="选择本页视频" type="checkbox" checked={allPageVideosSelected} disabled={!videos.length} onChange={(event) => togglePageVideos(event.target.checked)} /></th>
                 <th>视频</th>
                 <th>作者</th>
                 <th>播放</th>
@@ -2123,6 +2164,7 @@ function VideosPage({
                 const tikTokUrl = videoUrl(video);
                 return (
                   <tr key={video.id}>
+                    <td className="select-column"><input aria-label={`选择视频 ${video.title || video.video_id || video.id}`} type="checkbox" checked={selectedVideoIds.includes(video.id)} onChange={(event) => toggleVideo(video.id, event.target.checked)} /></td>
                     <td>
                       <button className="link-button" onClick={() => onVideo(video.id)}>{video.title || "无标题视频"}</button>
                       <div className="status-chip-row">
@@ -2160,8 +2202,9 @@ function VideosPage({
         </div>
         {!videos.length ? (
           <EmptyState
-            title={meta.total ? "当前页没有视频" : "还没有视频记录"}
-            detail={meta.total ? "换一页继续查看。" : "先同步账号，系统采集到视频后会在这里集中展示。"}
+            title={hasActiveFilters ? "没有符合筛选条件的视频" : meta.total ? "当前页没有视频" : "还没有视频记录"}
+            detail={hasActiveFilters ? "调整作者、关键词、时间或指标条件，或清除筛选后再查看。" : meta.total ? "换一页继续查看。" : "先同步账号，系统采集到视频后会在这里集中展示。"}
+            action={hasActiveFilters ? <button className="ghost-light-button" onClick={onClearFilters}>清除筛选</button> : undefined}
           />
         ) : null}
         <PageControls meta={meta} page={page} onPage={onPage} />
