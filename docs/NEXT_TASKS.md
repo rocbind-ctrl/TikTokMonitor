@@ -4,11 +4,11 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Validate and publish 0.2.17 video list filtering.
-   - Run server tests plus desktop type/build checks.
-   - Commit and publish the 0.2.17 changes after validation.
-   - Deploy the server after release because `/api/v2/videos` and video CSV
-     export now accept new filter parameters.
+1. Start 0.2.18 account list health visibility.
+   - Show stale, failed, empty, and incomplete account states directly in the
+     account list.
+   - Add one-click filters from account status chips where safe.
+   - Keep the existing data-quality filters as the source of truth.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -140,22 +140,27 @@ safe additions when they improve team operations.
   `/api/v2/videos` loading, video metrics, detail/open TikTok/copy link/copy
   ID/author jump actions, dashboard quick entry, GitHub Actions desktop builds,
   and Windows installer artifact.
-- Implemented 0.2.17 video list filtering in the working tree: server-side
-  video filters for keyword, author, link status, publish freshness, sync
-  freshness, metric bands, play ranges, sorting, filtered video CSV export,
-  desktop filter controls, and video issue chips.
+- Released 0.2.17 video list filtering: server-side video filters for keyword,
+  author, link status, publish freshness, sync freshness, metric bands, play
+  ranges, sorting, filtered video CSV export, desktop filter controls, video
+  issue chips, GitHub Actions desktop builds, Windows installer artifact,
+  server deployment, and online smoke tests.
 
 ## Follow-up Product Tasks
 
-1. Continue account/video productivity work after publishing 0.2.17.
-   - Add batch-friendly video actions where safe, such as copy selected video
-     links or IDs.
-   - Improve account list visibility for stale, failed, or incomplete accounts.
+1. Implement 0.2.18 account list health visibility.
+   - Add stale, failed, no-video, and missing-metric indicators to the account
+     table.
+   - Let operators jump from account row indicators to matching data-quality
+     filters.
 
-2. Improve desktop navigation and feature discoverability for non-technical
+2. Add batch-friendly video actions where safe, such as copy selected video
+   links or IDs.
+
+3. Improve desktop navigation and feature discoverability for non-technical
    operators.
 
-3. Keep the parity checklist synchronized as each 0.2.x release closes or
+4. Keep the parity checklist synchronized as each 0.2.x release closes or
    defers items.
 
 ## Engineering Tasks
@@ -174,5 +179,7 @@ safe additions when they improve team operations.
   `release/tiktokmonitor-windows-0.2.15-in-app-operator-guide/msi/TikTokMonitor_0.2.15_x64_en-US.msi`
 - Windows 0.2.16 installer:
   `release/tiktokmonitor-windows-0.2.16-video-workspace/msi/TikTokMonitor_0.2.16_x64_en-US.msi`
+- Windows 0.2.17 installer:
+  `release/rocbind-tiktokmonitor-windows-0.2.17-video-filters/msi/TikTokMonitor_0.2.17_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.

@@ -13,13 +13,13 @@ architecture.
 Latest published release commit:
 
 ```text
-6f371b7 Release 0.2.16 video workspace
+0162e13 Release 0.2.17 video filters
 ```
 
 GitHub remote:
 
 ```text
-https://github.com/netwebqi/TikTokMonitor
+https://github.com/rocbind-ctrl/TikTokMonitor
 ```
 
 ## Completed
@@ -63,7 +63,7 @@ https://github.com/netwebqi/TikTokMonitor
 - Added desktop data insights, operations center, provider health, backup
   management, sync logs, and audit logs.
 - Added V2 backup and audit APIs with isolated test coverage.
-- Released 0.2.6 through 0.2.16 through GitHub Actions.
+- Released 0.2.6 through 0.2.17 through GitHub Actions.
 - Added 0.2.9 desktop usability improvements for operation feedback,
   persistent operation results, and clearer empty states.
 - Added 0.2.10 desktop account/video productivity improvements: table
@@ -91,15 +91,14 @@ https://github.com/netwebqi/TikTokMonitor
   paginated video loading through the existing V2 API, video metrics,
   open/copy/detail/author shortcut actions, dashboard quick entry, GitHub
   Actions desktop builds, and Windows installer artifact.
-- Implemented 0.2.17 video filtering in the working tree: server-side video
-  filters and sorting, filtered video CSV export, desktop video filter
-  controls, and issue chips for missing links, stale sync, and low/high play
-  states.
+- Released 0.2.17 video filtering: server-side video filters and sorting,
+  filtered video CSV export, desktop video filter controls, issue chips for
+  missing links, stale sync, and low/high play states, central server
+  deployment, and online smoke tests.
 
 ## Pending
 
 - Continue 0.2.x product work against the recovered replica feature set.
-- Validate, publish, and deploy 0.2.17 video filtering.
 - Use `docs/NEXT_TASKS.md` as the active replica feature parity checklist for
   0.2.18 and later.
 - Keep deployment and release notes synchronized after each published version.
