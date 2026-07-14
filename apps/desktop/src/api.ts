@@ -627,6 +627,14 @@ export function createApiClient(baseUrl: string, sessionToken = "") {
       }),
     video: (videoId: number, historyPage = 1) =>
       request<Video>(`/api/v2/videos/${videoId}?history_page=${historyPage}`, { method: "GET" }),
+    videos: (page = 1, perPage = 50, accountId?: number) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(perPage)
+      });
+      if (accountId) params.set("account_id", String(accountId));
+      return requestPage<Video>(`/api/v2/videos?${params.toString()}`, { method: "GET" });
+    },
     alerts: (page = 1, perPage = 30, unreadOnly = false, level = "") =>
       requestPage<Alert>(
         `/api/v2/alerts?page=${page}&per_page=${perPage}&unread_only=${unreadOnly}&level=${encodeURIComponent(level)}`,

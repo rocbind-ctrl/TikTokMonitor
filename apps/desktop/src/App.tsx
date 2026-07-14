@@ -44,7 +44,7 @@ import {
 } from "./api";
 
 const DEFAULT_SERVER = "http://127.0.0.1:8099";
-type View = "dashboard" | "quality" | "insights" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings" | "help";
+type View = "dashboard" | "quality" | "insights" | "videos" | "account" | "video" | "alerts" | "logs" | "audit" | "providers" | "operations" | "backups" | "import" | "settings" | "help";
 type SavedAccountFilter = { id: string; name: string; filters: AccountFilters };
 type OperationState = {
   status: "running" | "success" | "error";
@@ -134,14 +134,17 @@ export default function App() {
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [accountsMeta, setAccountsMeta] = useState<PageMeta>(EMPTY_PAGE_META);
+  const [videosMeta, setVideosMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [alertsMeta, setAlertsMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [logsMeta, setLogsMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [auditMeta, setAuditMeta] = useState<PageMeta>(EMPTY_PAGE_META);
   const [accountPage, setAccountPage] = useState(1);
+  const [videoPage, setVideoPage] = useState(1);
   const [alertPage, setAlertPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
   const [auditPage, setAuditPage] = useState(1);
@@ -238,10 +241,12 @@ export default function App() {
         setInsights(null);
         setStats(null);
         setAccounts([]);
+        setVideos([]);
         setAlerts([]);
         setLogs([]);
         setAuditLogs([]);
         setAccountsMeta(EMPTY_PAGE_META);
+        setVideosMeta(EMPTY_PAGE_META);
         setAlertsMeta(EMPTY_PAGE_META);
         setLogsMeta(EMPTY_PAGE_META);
         setAuditMeta(EMPTY_PAGE_META);
@@ -251,12 +256,13 @@ export default function App() {
         return;
       }
 
-      const [nextDashboard, nextDataQuality, nextInsights, nextStats, nextAccounts, nextAlerts, nextLogs, nextAuditLogs, nextProviders, nextBackups] = await Promise.all([
+      const [nextDashboard, nextDataQuality, nextInsights, nextStats, nextAccounts, nextVideos, nextAlerts, nextLogs, nextAuditLogs, nextProviders, nextBackups] = await Promise.all([
         client.dashboard(),
         client.dataQuality(),
         client.insights(),
         client.stats(),
         client.accounts(accountPage, 50, accountFilters),
+        client.videos(videoPage, 50),
         client.alerts(alertPage, 30, unreadOnly, alertLevel),
         client.logs(logPage, 30, logFilters),
         client.auditLogs(auditPage, 30, auditFilters),
@@ -268,10 +274,12 @@ export default function App() {
       setInsights(nextInsights);
       setStats(nextStats);
       setAccounts(nextAccounts.items);
+      setVideos(nextVideos.items);
       setAlerts(nextAlerts.items);
       setLogs(nextLogs.items);
       setAuditLogs(nextAuditLogs.items);
       setAccountsMeta(nextAccounts.meta);
+      setVideosMeta(nextVideos.meta);
       setAlertsMeta(nextAlerts.meta);
       setLogsMeta(nextLogs.meta);
       setAuditMeta(nextAuditLogs.meta);
@@ -281,7 +289,7 @@ export default function App() {
         reportOperation(
           "success",
           "刷新完成",
-          `已更新 ${nextAccounts.meta.total} 个账号、${nextAlerts.meta.total} 条告警、${nextLogs.meta.total} 条同步日志。`,
+          `已更新 ${nextAccounts.meta.total} 个账号、${nextVideos.meta.total} 条视频、${nextAlerts.meta.total} 条告警、${nextLogs.meta.total} 条同步日志。`,
           { key: "refresh", startedAt }
         );
       }
@@ -300,7 +308,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, serverUrl, unreadOnly]);
+  }, [accountFilters, accountPage, alertLevel, alertPage, api, auditFilters, auditPage, logFilters, logPage, serverUrl, unreadOnly, videoPage]);
 
   useEffect(() => {
     void loadData();
@@ -862,6 +870,7 @@ export default function App() {
     dashboard: ["团队监控台", "集中服务器，多平台客户端。"],
     quality: ["数据健康", "检查过期同步、无视频、失败同步和缺失指标账号。"],
     insights: ["数据分析", "趋势、健康排行、异常检测和增长榜。"],
+    videos: ["视频列表", "集中查看视频、打开原链接、复制链接和跳转作者。"],
     account: ["账号详情", "账号资料、增长与同步记录。"],
     video: ["视频详情", "视频指标与历史快照。"],
     alerts: ["告警中心", "集中处理未读告警、异常提示和关联账号。"],
@@ -932,6 +941,10 @@ export default function App() {
           <button className={view === "insights" ? "active" : ""} disabled={!authenticated} onClick={() => setView("insights")}>
             <VideoIcon aria-hidden="true" />
             数据分析
+          </button>
+          <button className={view === "videos" ? "active" : ""} disabled={!authenticated} onClick={() => setView("videos")}>
+            <VideoIcon aria-hidden="true" />
+            视频列表
           </button>
           <button className={view === "quality" ? "active" : ""} disabled={!authenticated} onClick={() => setView("quality")}>
             <AlertTriangle aria-hidden="true" />
@@ -1082,6 +1095,22 @@ export default function App() {
             insights={insights}
             onAccount={(id) => void openAccount(id)}
             onVideo={(id) => void openVideo(id)}
+          />
+        ) : null}
+        {view === "videos" ? (
+          <VideosPage
+            videos={videos}
+            meta={videosMeta}
+            page={videoPage}
+            stats={stats}
+            busy={busy}
+            authenticated={authenticated}
+            onPage={setVideoPage}
+            onVideo={(id) => void openVideo(id)}
+            onAccount={(id) => void openAccount(id)}
+            onCopyLink={(video) => void copyText(videoUrl(video), "视频链接")}
+            onCopyVideoId={(video) => void copyText(video.video_id || "", "视频 ID")}
+            onExportVideos={() => void exportVideosCsv()}
           />
         ) : null}
         {view === "alerts" ? (
@@ -1418,6 +1447,11 @@ function Dashboard({
                 <Activity aria-hidden="true" />
                 <strong>导出当前报表</strong>
                 <span>按当前筛选导出账号 CSV，适合交接和复盘。</span>
+              </button>
+              <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("videos")}>
+                <VideoIcon aria-hidden="true" />
+                <strong>查看视频列表</strong>
+                <span>集中打开原视频、复制链接，或跳回作者账号排查。</span>
               </button>
               <button className="quick-action-card" disabled={!authenticated} onClick={() => onNavigate("alerts")}>
                 <AlertTriangle aria-hidden="true" />
@@ -1902,6 +1936,130 @@ function QualityCard({
         ))}
         {!card.samples.length ? <p className="empty-state">当前没有样例账号。</p> : null}
       </div>
+    </section>
+  );
+}
+
+function VideosPage({
+  videos,
+  meta,
+  page,
+  stats,
+  busy,
+  authenticated,
+  onPage,
+  onVideo,
+  onAccount,
+  onCopyLink,
+  onCopyVideoId,
+  onExportVideos
+}: {
+  videos: Video[];
+  meta: PageMeta;
+  page: number;
+  stats: Stats | null;
+  busy: boolean;
+  authenticated: boolean;
+  onPage: (page: number) => void;
+  onVideo: (id: number) => void;
+  onAccount: (id: number) => void;
+  onCopyLink: (video: Video) => void;
+  onCopyVideoId: (video: Video) => void;
+  onExportVideos: () => void;
+}) {
+  const videosWithLinks = videos.filter((video) => videoUrl(video)).length;
+  const totalPlaysOnPage = videos.reduce((sum, video) => sum + (video.play_count || 0), 0);
+  const recentVideos = videos.filter((video) => {
+    if (!video.published_at) return false;
+    return Date.now() - new Date(video.published_at).getTime() <= 24 * 60 * 60 * 1000;
+  }).length;
+
+  return (
+    <section className="detail-layout">
+      <section className="metric-grid detail-metrics">
+        <Metric icon={<VideoIcon />} label="视频总数" value={stats?.total_videos || meta.total} detail={`当前页 ${videos.length} 条`} />
+        <Metric icon={<Activity />} label="当前页播放" value={totalPlaysOnPage} detail="用于快速判断本页热度" />
+        <Metric icon={<ExternalLink />} label="可打开链接" value={videosWithLinks} detail="有作者和视频 ID" />
+        <Metric icon={<CheckCircle2 />} label="24h 新发" value={recentVideos} detail="按发布时间粗略判断" />
+      </section>
+
+      <section className="panel quick-nav-panel">
+        <div>
+          <h2>视频工作台</h2>
+          <p>集中处理视频：看详情、打开 TikTok、复制链接或回到作者账号，比只从账号详情里一条条找更快。</p>
+        </div>
+        <div className="quick-nav-actions">
+          <button className="ghost-light-button" disabled={busy || !authenticated} onClick={onExportVideos}>
+            <FileUp aria-hidden="true" />导出视频 CSV
+          </button>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>全部视频</h2>
+          <span>{meta.total} 条</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>视频</th>
+                <th>作者</th>
+                <th>播放</th>
+                <th>点赞</th>
+                <th>评论</th>
+                <th>分享</th>
+                <th>发布时间</th>
+                <th>最近同步</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {videos.map((video) => {
+                const tikTokUrl = videoUrl(video);
+                return (
+                  <tr key={video.id}>
+                    <td>
+                      <button className="link-button" onClick={() => onVideo(video.id)}>{video.title || "无标题视频"}</button>
+                      <div className="mini-action-row">
+                        <button onClick={() => onVideo(video.id)}>详情</button>
+                        {tikTokUrl ? <a href={tikTokUrl} target="_blank" rel="noreferrer">TikTok</a> : null}
+                        <button disabled={!tikTokUrl} onClick={() => onCopyLink(video)}>复制链接</button>
+                        <button disabled={!video.video_id} onClick={() => onCopyVideoId(video)}>复制 ID</button>
+                      </div>
+                    </td>
+                    <td>
+                      {video.account ? (
+                        <button className="link-button" onClick={() => onAccount(video.account!.id)}>@{video.account.username}</button>
+                      ) : "-"}
+                    </td>
+                    <td>{compactNumber(video.play_count)}</td>
+                    <td>{compactNumber(video.like_count)}</td>
+                    <td>{compactNumber(video.comment_count)}</td>
+                    <td>{compactNumber(video.share_count)}</td>
+                    <td>{formatDate(video.published_at)}</td>
+                    <td>{formatDate(video.last_sync_at)}</td>
+                    <td>
+                      <div className="account-actions">
+                        <button className="text-button" onClick={() => onVideo(video.id)}>详情</button>
+                        {video.account ? <button className="text-button" onClick={() => onAccount(video.account!.id)}>作者</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {!videos.length ? (
+          <EmptyState
+            title={meta.total ? "当前页没有视频" : "还没有视频记录"}
+            detail={meta.total ? "换一页继续查看。" : "先同步账号，系统采集到视频后会在这里集中展示。"}
+          />
+        ) : null}
+        <PageControls meta={meta} page={page} onPage={onPage} />
+      </section>
     </section>
   );
 }

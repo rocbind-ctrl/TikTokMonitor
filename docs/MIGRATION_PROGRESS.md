@@ -1,6 +1,6 @@
 # TikTokMonitor Cross-Platform Migration Progress
 
-Updated: 2026-07-13
+Updated: 2026-07-14
 
 ## Current Status
 
@@ -13,7 +13,7 @@ architecture.
 Latest published release commit:
 
 ```text
-093a7e4 Release 0.2.14 account video shortcuts
+96bd2e3 Release 0.2.15 in-app operator guide
 ```
 
 GitHub remote:
@@ -63,7 +63,7 @@ https://github.com/netwebqi/TikTokMonitor
 - Added desktop data insights, operations center, provider health, backup
   management, sync logs, and audit logs.
 - Added V2 backup and audit APIs with isolated test coverage.
-- Released 0.2.6 through 0.2.14 through GitHub Actions.
+- Released 0.2.6 through 0.2.15 through GitHub Actions.
 - Added 0.2.9 desktop usability improvements for operation feedback,
   persistent operation results, and clearer empty states.
 - Added 0.2.10 desktop account/video productivity improvements: table
@@ -83,14 +83,21 @@ https://github.com/netwebqi/TikTokMonitor
   copy, per-video TikTok/open/copy actions from account detail, video detail
   shortcuts for video ID/original video/author profile, GitHub Actions desktop
   builds, and Windows installer artifact.
-- Implemented 0.2.15 in-app guidance in the working tree: a desktop usage
-  guide view for first use, daily checks, import/export, sync troubleshooting,
-  backup operations, and common connection/data issues.
+- Released 0.2.15 in-app guidance: a desktop usage guide view for first use,
+  daily checks, import/export, sync troubleshooting, backup operations, common
+  connection/data issues, GitHub Actions desktop builds, and Windows installer
+  artifact.
+- Implemented 0.2.16 video workspace in the working tree: dedicated desktop
+  video list navigation, paginated video loading through the existing V2 API,
+  video metrics, open/copy/detail/author shortcut actions, dashboard quick
+  entry, and desktop package version bump.
 
 ## Pending
 
 - Continue 0.2.x product work against the recovered replica feature set.
-- Validate and publish 0.2.15 in-app guidance for non-technical operators.
+- Validate and publish 0.2.16 video workspace for desktop operators.
+- Use `docs/NEXT_TASKS.md` as the active replica feature parity checklist for
+  0.2.17 and later.
 - Keep deployment and release notes synchronized after each published version.
 - Plan the database migration path before the system becomes daily team
   infrastructure.

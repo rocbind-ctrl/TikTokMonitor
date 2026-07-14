@@ -1,13 +1,14 @@
 # Next Tasks
 
-Updated: 2026-07-13
+Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Finish 0.2.15: validate and publish in-app operator guidance.
+1. Validate and publish 0.2.16 video workspace.
    - Run desktop type/build checks.
-   - Commit and publish the 0.2.15 changes after validation.
-   - Server deployment is not required because this is desktop-only.
+   - Commit and publish the 0.2.16 changes after validation.
+   - Server deployment is not required because this release only reuses the
+     existing `/api/v2/videos` API.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -20,6 +21,72 @@ Updated: 2026-07-13
    - PostgreSQL should be planned before multiple operators rely on the system
      every day.
    - Document the migration sequence before changing production data storage.
+
+## Replica Feature Parity Checklist
+
+The recovered replica is used as the functional reference. New desktop work
+should keep the migrated app at least as capable as the replica, while allowing
+safe additions when they improve team operations.
+
+### Completed or covered in the migrated app
+
+- Account management: account list, add account, account detail, safe edits,
+  batch import, saved filters, pagination, and CSV export.
+- Video monitoring: dedicated video list workspace, video detail, trend charts,
+  video CSV export, open/copy original video actions, author jump actions, and
+  account-detail video shortcuts.
+- Sync workflows: single-account sync, sync-all queueing, duplicate guards,
+  sync logs, queue summaries, operation duration/result feedback, and clearer
+  empty states.
+- Alerts and anomalies: alert list, level filtering, linked account/video
+  navigation, selected bulk read, dashboard analytics, and anomaly views.
+- Operations: provider health, backup management, audit logs, operation
+  history, data-quality checks, and in-app usage guidance.
+- Release/deployment: GitHub Actions server checks, desktop builds, Docker
+  deployment guide, backup/restore tooling, and cloud server smoke tests.
+
+### 0.2.x must-fill gaps
+
+1. Account list productivity.
+   - Add richer quick actions for common account operations.
+   - Make bulk operations easier to discover and safer to execute.
+   - Improve visibility of stale, failed, or incomplete accounts from the list.
+
+2. Video list productivity.
+   - Add stronger filters for missing links, low/high metrics, recent changes,
+     and sync freshness.
+   - Add batch-friendly actions where safe, such as copy/open selected video
+     references.
+   - Make metric changes and abnormal videos easier to spot without opening
+     every detail page.
+
+3. Replica-style workflow shortcuts.
+   - Add more direct paths from dashboard cards to the filtered list that
+     explains the card.
+   - Preserve the current cross-links between account, video, alert, and
+     health views.
+   - Keep copy/open actions consistent across table rows and detail pages.
+
+4. Operator guidance.
+   - Continue adding inline next-step hints near empty, failed, or partial-data
+     states.
+   - Make connection, login, export, and sync troubleshooting visible from the
+     relevant page, not only from the guide.
+
+### Can be enhanced after the must-fill gaps
+
+- More configurable saved filters and named operator views.
+- More dashboard drill-downs for growth, anomaly, and data-quality segments.
+- More export presets for handoff/reporting.
+- Optional scheduled health summaries for operators.
+
+### Defer for now
+
+- PostgreSQL migration execution.
+- Large UI redesign.
+- Public internet exposure changes, domain/TLS setup, or authentication model
+  changes.
+- Any destructive data cleanup or schema migration.
 
 ## Completed Since Last Update
 
@@ -66,18 +133,26 @@ Updated: 2026-07-13
 - Released 0.2.14 account/video shortcuts: copy username, per-video open/copy
   actions from account detail, copy video ID, author profile actions, and
   Windows desktop installer through GitHub Actions.
-- Implemented 0.2.15 desktop usage guide in the working tree for first use,
-  daily checks, import/export, sync troubleshooting, backups, and connection
-  issues.
+- Released 0.2.15 desktop usage guide for first use, daily checks,
+  import/export, sync troubleshooting, backups, connection issues, GitHub
+  Actions desktop builds, and Windows installer artifact.
+- Implemented 0.2.16 desktop video workspace in the working tree: side-nav
+  video list, paginated `/api/v2/videos` loading, video metrics, detail/open
+  TikTok/copy link/copy ID/author jump actions, dashboard quick entry, and
+  desktop version bump.
 
 ## Follow-up Product Tasks
 
-1. Close remaining account/video productivity gaps from the recovered replica.
+1. Continue account/video productivity work after publishing 0.2.16.
+   - Add stronger video filters for missing links, metric ranges, freshness,
+     and recent changes.
+   - Improve account list visibility for stale, failed, or incomplete accounts.
 
 2. Improve desktop navigation and feature discoverability for non-technical
    operators.
 
-3. Close remaining account/video productivity gaps from the recovered replica.
+3. Keep the parity checklist synchronized as each 0.2.x release closes or
+   defers items.
 
 ## Engineering Tasks
 
@@ -91,7 +166,7 @@ Updated: 2026-07-13
 
 ## Current Local Artifacts
 
-- Windows 0.2.14 installer:
-  `release/tiktokmonitor-windows-0.2.14-account-video-shortcuts/msi/TikTokMonitor_0.2.14_x64_en-US.msi`
+- Windows 0.2.15 installer:
+  `release/tiktokmonitor-windows-0.2.15-in-app-operator-guide/msi/TikTokMonitor_0.2.15_x64_en-US.msi`
 
 Release artifacts are intentionally ignored by Git.
