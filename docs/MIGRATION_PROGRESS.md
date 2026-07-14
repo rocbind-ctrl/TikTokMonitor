@@ -95,9 +95,14 @@ https://github.com/rocbind-ctrl/TikTokMonitor
   filtered video CSV export, desktop video filter controls, issue chips for
   missing links, stale sync, and low/high play states, central server
   deployment, and online smoke tests.
+- Implemented 0.2.18 account list health visibility in the working tree:
+  desktop account rows show data-quality chips for stale sync, no videos, no
+  recent posts, sync failures, and missing metrics, and each chip jumps to the
+  matching account health filter.
 
 ## Pending
 
+- Validate and publish 0.2.18 account list health visibility.
 - Continue 0.2.x product work against the recovered replica feature set.
 - Use `docs/NEXT_TASKS.md` as the active replica feature parity checklist for
   0.2.18 and later.

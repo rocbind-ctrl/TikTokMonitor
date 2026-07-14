@@ -58,6 +58,13 @@ type OperationState = {
 const EMPTY_PAGE_META: PageMeta = { page: 1, per_page: 1, total: 0, total_pages: 1 };
 const SAVED_ACCOUNT_FILTERS_KEY = "tiktokmonitor.savedAccountFilters";
 const OPERATION_HISTORY_KEY = "tiktokmonitor.operationHistory";
+const ACCOUNT_QUALITY_FALLBACK_LABELS: Record<string, string> = {
+  stale_sync: "同步过期",
+  no_videos: "无视频",
+  no_recent_post: "7天未发文",
+  sync_failed: "同步失败",
+  missing_metrics: "缺指标"
+};
 
 function compactNumber(value: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { notation: "compact" }).format(value || 0);
@@ -1085,6 +1092,7 @@ export default function App() {
             onOpenAccount={(id) => void openAccount(id)}
             onNavigate={setView}
             onCopyAccountLink={(account) => void copyText(profileUrl(account.username), `@${account.username} 主页链接`)}
+            onApplyQuality={applyQualityFilter}
             onAlert={(alert) => void handleAlert(alert)}
             onReadAll={() => markAllAlertsRead()}
           />
@@ -1340,6 +1348,7 @@ function Dashboard({
   onOpenAccount,
   onNavigate,
   onCopyAccountLink,
+  onApplyQuality,
   onAlert,
   onReadAll
 }: {
@@ -1388,6 +1397,7 @@ function Dashboard({
   onOpenAccount: (id: number) => void;
   onNavigate: (view: View) => void;
   onCopyAccountLink: (account: Account) => void;
+  onApplyQuality: (quality: string) => void;
   onAlert: (alert: Alert) => void;
   onReadAll: () => Promise<void>;
 }) {
@@ -1396,6 +1406,7 @@ function Dashboard({
   const phones = options.phones || [];
   const employees = options.employees || [];
   const sortOptions = options.sort_options || accountsMeta.sort_options || {};
+  const qualityLabels = { ...ACCOUNT_QUALITY_FALLBACK_LABELS, ...(options.quality_filters || {}) };
   const progress = dashboard?.sync.progress;
   const syncBusy = Boolean(progress?.running || (dashboard?.sync.queue_size || 0) > 0);
   const [bulkTags, setBulkTags] = useState({ group_name: "", phone: "", employee: "", note: "" });
@@ -1415,6 +1426,9 @@ function Dashboard({
     onAccountFilterChange("status", "active");
     onAccountFilterChange("sort", "plays_desc");
   };
+  const accountQualityIssues = (account: Account) => Object.entries(account.quality_flags || {})
+    .filter(([key, active]) => active && qualityLabels[key])
+    .map(([key]) => ({ key, label: qualityLabels[key] }));
   return (
     <>
       <section className="metric-grid">
@@ -1633,6 +1647,18 @@ function Dashboard({
                       <div className="mini-action-row">
                         <a href={profileUrl(account.username)} target="_blank" rel="noreferrer">TikTok</a>
                         <button onClick={() => onCopyAccountLink(account)}>复制</button>
+                      </div>
+                      <div className="status-chip-row">
+                        {accountQualityIssues(account).map((issue) => (
+                          <button
+                            className="status-chip status-chip-button"
+                            key={issue.key}
+                            onClick={() => onApplyQuality(issue.key)}
+                            title={`筛选：${issue.label}`}
+                          >
+                            {issue.label}
+                          </button>
+                        ))}
                       </div>
                     </td>
                     <td>

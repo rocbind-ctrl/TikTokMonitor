@@ -4,11 +4,11 @@ Updated: 2026-07-14
 
 ## Immediate Tasks
 
-1. Start 0.2.18 account list health visibility.
-   - Show stale, failed, empty, and incomplete account states directly in the
-     account list.
-   - Add one-click filters from account status chips where safe.
-   - Keep the existing data-quality filters as the source of truth.
+1. Validate and publish 0.2.18 account list health visibility.
+   - Verify account-row health chips for stale sync, sync failure, no videos,
+     no recent posts, and missing metrics.
+   - Verify one-click filters from account status chips.
+   - Publish the Windows desktop build after GitHub Actions passes.
 
 2. Keep release operations repeatable.
    - Update docs after each version.
@@ -145,14 +145,16 @@ safe additions when they improve team operations.
   ranges, sorting, filtered video CSV export, desktop filter controls, video
   issue chips, GitHub Actions desktop builds, Windows installer artifact,
   server deployment, and online smoke tests.
+- Implemented 0.2.18 account list health visibility in the working tree:
+  account rows now show data-quality chips for stale sync, no videos, no recent
+  posts, sync failures, and missing metrics; clicking a chip applies the
+  matching account health filter. Validation and publication are pending.
 
 ## Follow-up Product Tasks
 
-1. Implement 0.2.18 account list health visibility.
-   - Add stale, failed, no-video, and missing-metric indicators to the account
-     table.
-   - Let operators jump from account row indicators to matching data-quality
-     filters.
+1. Validate and publish 0.2.18 account list health visibility.
+   - Confirm local desktop build and GitHub Actions artifact.
+   - Install-check the Windows desktop build against the deployed server.
 
 2. Add batch-friendly video actions where safe, such as copy selected video
    links or IDs.
